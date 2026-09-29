@@ -1,0 +1,61 @@
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    max-swallow-size: -1
+    connection-timeout: 10m
+
+spring:
+  application:
+    name: heatnet
+  web:
+    resources:
+      cache:
+        # интерфейс отдаётся из jar: браузер каждый раз переспрашивает, иначе после обновления сервиса
+        # остаётся старая разметка и стили
+        cachecontrol:
+          no-cache: true
+          must-revalidate: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/heatnet}
+    username: ${DB_USER:heatnet}
+    password: ${DB_PASSWORD:heatnet}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  sql:
+    init:
+      mode: always
+      continue-on-error: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 3200MB
+      max-request-size: 3200MB
+      # everything above 0 bytes goes to disk, never to memory (R-ENV-7)
+      file-size-threshold: 0
+      location: ${HEATNET_STORAGE_DIR:/data}/tmp
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    # operations stay in the order of the scenario set in web/OpenApiConfig (no alphabetical sorting)
+    doc-expansion: list
+    default-models-expand-depth: 1
+    display-request-duration: true
+  api-docs:
+    path: /v3/api-docs
+
+heatnet:
+  storage-dir: ${HEATNET_STORAGE_DIR:/data}
+  # parallel calculations and imports; other requests wait in the queue (up to 50 users, R-ENV-9)
+  run-threads: ${HEATNET_RUN_THREADS:2}
+  import-threads: ${HEATNET_IMPORT_THREADS:2}
+  queue-capacity: 200
+  # uploads and results are refused below this free disk space; finished runs beyond this count per dataset are
+  # removed once they are older than keep-runs-min-hours
+  min-free-disk-mb: ${HEATNET_MIN_FREE_DISK_MB:2048}
+  keep-runs-per-dataset: ${HEATNET_KEEP_RUNS:50}
+  keep-runs-min-hours: ${HEATNET_KEEP_RUNS_MIN_HOURS:24}
+  copy-batch-rows: 5000
+  # flow of the existing network when the input has none: ZERO | CAPACITY_SHARE
+  existing-flow: ${HEATNET_EXISTING_FLOW:ZERO}
+  existing-flow-share: ${HEATNET_EXISTING_FLOW_SHARE:0.5}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Трассы подключения к тепловой сети</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%230e7490'/%3E%3Cpath d='M3 11h4V5h6' stroke='%23fff' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="webjars/maplibre-gl/5.24.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/" title="К списку наборов"><svg class="icon" aria-hidden="true"><use href="icons.svg#i-network"/></svg>Трассы подключения<span> к тепловой сети</span></a>
+  <nav id="stepper" class="stepper" aria-label="Шаги работы"></nav>
+  <div class="top-tools">
+    <span class="load" id="load" hidden></span>
+    <button type="button" class="ghost" id="help-button" title="Порядок работы, метод расчёта, термины"><svg class="icon" aria-hidden="true"><use href="icons.svg#i-book"/></svg>Справка</button>
+    <button type="button" class="ghost" id="anim-button" aria-haspopup="true" title="Показ построения и анимации"><svg class="icon" aria-hidden="true"><use href="icons.svg#i-settings"/></svg>Настройки</button>
+    <a class="ghost button" href="swagger-ui.html" target="_blank" rel="noopener" title="Описание API (Swagger UI)"><svg class="icon" aria-hidden="true"><use href="icons.svg#i-code"/></svg>API</a>
+  </div>
+</header>
+<div class="context" id="context"></div>
+<main class="layout">
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+  <section class="mapwrap">
+    <div id="map"></div>
+    <div class="legend" id="legend"></div>
+    <div class="map-hint" id="map-hint" hidden></div>
+    <div class="player" id="player" hidden></div>
+  </section>
+</main>
+<div class="menu" id="anim-menu" hidden></div>
+<dialog class="dialog" id="dialog"></dialog>
+<div class="toasts" id="toasts"></div>
+<script src="webjars/maplibre-gl/5.24.0/dist/maplibre-gl.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

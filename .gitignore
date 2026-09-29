@@ -1,0 +1,8 @@
+target/
+test-data/generated/
+*.log
+__pycache__/
+.DS_Store
+.idea/
+*.iml
+.vscode/

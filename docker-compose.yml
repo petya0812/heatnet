@@ -1,0 +1,58 @@
+# Format 2.4: supported by docker-compose 1.29.2 (ТЗ, раздел 3) and supports health conditions.
+version: "2.4"
+
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    # the official PostGIS image is published for amd64 only (target: Ubuntu Server 22 x86-64)
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: heatnet
+      POSTGRES_USER: heatnet
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-heatnet}
+    # jit=off: tiles and obstacle queries are short, JIT compilation took ~270 ms each on the 3 GB dataset
+    # memory budget of the 16 GB server (ТЗ, раздел 3): DB up to 5 GB, application up to 9 GB, the rest for the OS
+    command: >
+      postgres -c shared_buffers=${DB_SHARED_BUFFERS:-1536MB} -c effective_cache_size=3GB
+               -c maintenance_work_mem=512MB -c max_wal_size=4GB -c work_mem=32MB -c max_connections=100
+               -c jit=off
+    mem_limit: ${DB_MEM_LIMIT:-5g}
+    shm_size: 2g
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heatnet -d heatnet"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: heatnet:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/heatnet
+      DB_USER: heatnet
+      DB_PASSWORD: ${DB_PASSWORD:-heatnet}
+      # heap 6 GB of the 9 GB container: two calculations in parallel + streaming import of 3 GB
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx6g -XX:+ExitOnOutOfMemoryError}
+      HEATNET_RUN_THREADS: ${HEATNET_RUN_THREADS:-2}
+      HEATNET_IMPORT_THREADS: ${HEATNET_IMPORT_THREADS:-2}
+      HEATNET_EXISTING_FLOW: ${HEATNET_EXISTING_FLOW:-ZERO}
+      HEATNET_EXISTING_FLOW_SHARE: ${HEATNET_EXISTING_FLOW_SHARE:-0.5}
+      HEATNET_MIN_FREE_DISK_MB: ${HEATNET_MIN_FREE_DISK_MB:-2048}
+      HEATNET_KEEP_RUNS: ${HEATNET_KEEP_RUNS:-50}
+      HEATNET_KEEP_RUNS_MIN_HOURS: ${HEATNET_KEEP_RUNS_MIN_HOURS:-24}
+    mem_limit: ${APP_MEM_LIMIT:-9g}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - app-data:/data
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  app-data:

@@ -1,0 +1,282 @@
+{
+  "_source": "Техническое приложение к кейсу ЛЦТ 2026, редакция 18.09.2026, разделы 1–7; разъяснения организаторов 18.09.2026",
+  "pipes": [
+    {
+      "dn": 50,
+      "capacityTph": 3.5,
+      "maxLengthM": 181,
+      "newCostPerM": 74023,
+      "pairWidthM": 0.4,
+      "heightM": 0.125
+    },
+    {
+      "dn": 65,
+      "capacityTph": 8.3,
+      "maxLengthM": 245,
+      "newCostPerM": 78631,
+      "pairWidthM": 0.43,
+      "heightM": 0.14
+    },
+    {
+      "dn": 80,
+      "capacityTph": 13.2,
+      "maxLengthM": 327,
+      "newCostPerM": 83530,
+      "pairWidthM": 0.47,
+      "heightM": 0.16
+    },
+    {
+      "dn": 100,
+      "capacityTph": 22.3,
+      "maxLengthM": 419,
+      "newCostPerM": 89748,
+      "pairWidthM": 0.51,
+      "heightM": 0.18
+    },
+    {
+      "dn": 125,
+      "capacityTph": 40.2,
+      "maxLengthM": 554,
+      "newCostPerM": 97275,
+      "pairWidthM": 0.6,
+      "heightM": 0.225
+    },
+    {
+      "dn": 150,
+      "capacityTph": 65.1,
+      "maxLengthM": 696,
+      "newCostPerM": 105507,
+      "pairWidthM": 0.65,
+      "heightM": 0.25
+    },
+    {
+      "dn": 200,
+      "capacityTph": 152.3,
+      "maxLengthM": 1042,
+      "newCostPerM": 120275,
+      "pairWidthM": 0.88,
+      "heightM": 0.315
+    },
+    {
+      "dn": 250,
+      "capacityTph": 274.9,
+      "maxLengthM": 1379,
+      "newCostPerM": 135323,
+      "pairWidthM": 1.05,
+      "heightM": 0.4
+    },
+    {
+      "dn": 300,
+      "capacityTph": 437.4,
+      "maxLengthM": 1718,
+      "newCostPerM": 150022,
+      "pairWidthM": 1.15,
+      "heightM": 0.45
+    },
+    {
+      "dn": 400,
+      "capacityTph": 943.1,
+      "maxLengthM": 2477,
+      "newCostPerM": 190299,
+      "pairWidthM": 1.37,
+      "heightM": 0.56
+    },
+    {
+      "dn": 500,
+      "capacityTph": 1663.4,
+      "maxLengthM": 3245,
+      "newCostPerM": 224137,
+      "pairWidthM": 1.67,
+      "heightM": 0.71
+    },
+    {
+      "dn": 600,
+      "capacityTph": 2627.7,
+      "maxLengthM": 4037,
+      "newCostPerM": 264790,
+      "pairWidthM": 1.85,
+      "heightM": 0.8
+    },
+    {
+      "dn": 700,
+      "capacityTph": 3735.1,
+      "maxLengthM": 4775,
+      "newCostPerM": 324298,
+      "pairWidthM": 2.05,
+      "heightM": 0.9
+    },
+    {
+      "dn": 800,
+      "capacityTph": 5296.8,
+      "maxLengthM": 5644,
+      "newCostPerM": 325996,
+      "pairWidthM": 2.25,
+      "heightM": 1.0
+    },
+    {
+      "dn": 900,
+      "capacityTph": 7165.0,
+      "maxLengthM": 6518,
+      "newCostPerM": 327693,
+      "pairWidthM": 2.45,
+      "heightM": 1.1
+    },
+    {
+      "dn": 1000,
+      "capacityTph": 9391.8,
+      "maxLengthM": 7419,
+      "newCostPerM": 418777,
+      "pairWidthM": 2.65,
+      "heightM": 1.2
+    },
+    {
+      "dn": 1200,
+      "capacityTph": 15012.8,
+      "maxLengthM": 9288,
+      "newCostPerM": 428074,
+      "pairWidthM": 3.1,
+      "heightM": 1.425
+    },
+    {
+      "dn": 1400,
+      "capacityTph": 22501.9,
+      "maxLengthM": 11276,
+      "newCostPerM": 683417,
+      "pairWidthM": 3.45,
+      "heightM": 1.6
+    }
+  ],
+  "chamberCosts": [
+    {
+      "minDn": 50,
+      "maxDn": 200,
+      "cost": 3000000
+    },
+    {
+      "minDn": 250,
+      "maxDn": 500,
+      "cost": 5000000
+    },
+    {
+      "minDn": 600,
+      "maxDn": 1000,
+      "cost": 8000000
+    },
+    {
+      "minDn": 1200,
+      "maxDn": 1400,
+      "cost": 12000000
+    }
+  ],
+  "tieInCost": 5000000,
+  "tieInChamberRadiusM": 10.0,
+  "maxChamberDegree": 4,
+  "unconnectedPenaltyFixed": 100000000,
+  "unconnectedPenaltyPerTph": 500000,
+  "score": {
+    "costWeight": 0.7,
+    "costBase": 25000000,
+    "lengthWeight": 0.3,
+    "lengthBase": 100
+  },
+  "existingBuilding": {
+    "distances": [
+      {
+        "maxDnExclusive": 500,
+        "distanceM": 5.0
+      },
+      {
+        "maxDnExclusive": 900,
+        "distanceM": 7.0
+      },
+      {
+        "maxDnExclusive": 100000,
+        "distanceM": 9.0
+      }
+    ]
+  },
+  "restrictions": [
+    {
+      "type": "park",
+      "rule": "FORBIDDEN",
+      "minDistanceM": 1.0
+    },
+    {
+      "type": "social_area",
+      "rule": "FORBIDDEN",
+      "minDistanceM": 1.0
+    },
+    {
+      "type": "prohibited_site",
+      "rule": "FORBIDDEN",
+      "minDistanceM": 1.0
+    },
+    {
+      "type": "water",
+      "rule": "FORBIDDEN",
+      "minDistanceM": 1.0
+    },
+    {
+      "type": "railway",
+      "rule": "FORBIDDEN",
+      "minDistanceM": 1.0
+    },
+    {
+      "type": "road",
+      "rule": "SPECIAL",
+      "minDistanceM": 1.5,
+      "minAngleDeg": 45,
+      "bounds": "AREA_PLUS",
+      "boundsM": 3.0,
+      "k": 1.6
+    },
+    {
+      "type": "tram_tracks",
+      "rule": "SPECIAL",
+      "minDistanceM": 1.5,
+      "minAngleDeg": 45,
+      "bounds": "AREA_PLUS",
+      "boundsM": 3.0,
+      "k": 1.75
+    },
+    {
+      "type": "gas_pipeline",
+      "rule": "SPECIAL",
+      "minDistanceM": 2.0,
+      "bounds": "AROUND_CROSSING",
+      "boundsM": 2.0,
+      "k": 1.25,
+      "objectWidthM": 0.4
+    },
+    {
+      "type": "power_cable",
+      "rule": "SPECIAL",
+      "minDistanceM": 2.0,
+      "bounds": "AROUND_CROSSING",
+      "boundsM": 2.0,
+      "k": 1.15,
+      "objectWidthM": 0.2
+    },
+    {
+      "type": "heat_network",
+      "rule": "SPECIAL",
+      "minDistanceM": 1.0,
+      "bounds": "AROUND_CROSSING",
+      "boundsM": 2.0,
+      "k": 1.05
+    }
+  ],
+  "unknownRestriction": {
+    "rule": "FORBIDDEN",
+    "minDistanceM": 1.0
+  },
+  "buildingRestrictionTypes": [
+    "oks"
+  ],
+  "turn": {
+    "_source": "ТП 2.1 (ред. 18.09.2026): произвольный угол поворота до 90° включительно, отдельного удорожания нет",
+    "maxDeg": 90.0,
+    "toleranceDeg": 1.0,
+    "straightDeg": 1.0
+  }
+}

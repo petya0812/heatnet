@@ -1,0 +1,2001 @@
+{
+  "POST /api/datasets": {
+    "id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "status": "UPLOADED"
+  },
+  "GET /api/datasets": [
+    {
+      "id": "f8a0c748-78a4-4320-ac3c-e9f6363edc17",
+      "name": "small",
+      "status": "CANCELLED",
+      "created_at": "2026-09-24T15:58:16.323+00:00",
+      "finished_at": null,
+      "file_bytes": 8817,
+      "feature_count": null,
+      "imported_count": null,
+      "import_millis": null,
+      "type_counts": null,
+      "issue_counts": null,
+      "bbox": null,
+      "error": null,
+      "parent_id": null,
+      "root_id": "f8a0c748-78a4-4320-ac3c-e9f6363edc17",
+      "version": 1,
+      "edits": null,
+      "note": null,
+      "run_count": 0
+    },
+    {
+      "id": "d10f11c7-634f-477f-ab34-c30c1e5aff87",
+      "name": "small",
+      "status": "READY",
+      "created_at": "2026-09-24T15:58:13.133+00:00",
+      "finished_at": "2026-09-24T15:58:14.321+00:00",
+      "file_bytes": 8817,
+      "feature_count": 34,
+      "imported_count": 34,
+      "import_millis": 164,
+      "type_counts": {
+        "source": 1,
+        "oks_future": 6,
+        "restriction": 10,
+        "heat_chamber": 3,
+        "heat_network": 5,
+        "oks_existing": 3,
+        "oks_connection_point": 6
+      },
+      "issue_counts": {
+        "edit.restriction_added": 1,
+        "restriction.unknown_type": 1
+      },
+      "bbox": [
+        37.61292606,
+        55.747515885
+      ],
+      "error": null,
+      "parent_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "version": 2,
+      "edits": [
+        {
+          "id": "edit-d10f11c7-1",
+          "op": "add_restriction",
+          "area_m2": 2515,
+          "comment": "стройплощадка до конца года",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  37.6203247245,
+                  55.749276433
+                ],
+                [
+                  37.62092472450001,
+                  55.749276433
+                ],
+                [
+                  37.62092472450001,
+                  55.749876433000004
+                ]
+              ]
+            ]
+          },
+          "restriction_type": "prohibited_site"
+        }
+      ],
+      "note": "стройплощадка в центре района",
+      "run_count": 0
+    }
+  ],
+  "GET /api/datasets/{id}": {
+    "id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "name": "small",
+    "status": "READY",
+    "created_at": "2026-09-24T15:58:11.001+00:00",
+    "finished_at": "2026-09-24T15:58:11.269+00:00",
+    "file_bytes": 8817,
+    "feature_count": 33,
+    "imported_count": 33,
+    "import_millis": 253,
+    "type_counts": {
+      "source": 1,
+      "oks_future": 6,
+      "restriction": 9,
+      "heat_chamber": 3,
+      "heat_network": 5,
+      "oks_existing": 3,
+      "oks_connection_point": 6
+    },
+    "issue_counts": {
+      "restriction.unknown_type": 1
+    },
+    "bbox": [
+      37.61292606,
+      55.747515885
+    ],
+    "error": null,
+    "parent_id": null,
+    "root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "version": 1,
+    "edits": null,
+    "note": null,
+    "run_count": 2
+  },
+  "POST /api/datasets/{id}/cancel": {
+    "id": "f8a0c748-78a4-4320-ac3c-e9f6363edc17",
+    "name": "small",
+    "status": "IMPORTING",
+    "created_at": "2026-09-24T15:58:16.323+00:00",
+    "finished_at": null,
+    "file_bytes": 8817,
+    "feature_count": null,
+    "imported_count": null,
+    "import_millis": null,
+    "type_counts": null,
+    "issue_counts": null,
+    "bbox": null,
+    "error": null,
+    "parent_id": null,
+    "root_id": "f8a0c748-78a4-4320-ac3c-e9f6363edc17",
+    "version": 1,
+    "edits": null,
+    "note": null,
+    "run_count": 0,
+    "progress": {
+      "bytes_read": 0,
+      "bytes_total": 8817
+    }
+  },
+  "GET /api/datasets/{id}/issues": [
+    {
+      "severity": "WARNING",
+      "code": "restriction.unknown_type",
+      "feature_id": "metro-1",
+      "message": "restriction_type 'metro' is not in table 2, treated as forbidden with 1 m clearance",
+      "group": "assumption",
+      "title": "Тип ограничения не из справочника",
+      "meaning": "Правила для него нет — объект обходится с отступом 1 м.",
+      "param": "unknown_restrictions"
+    }
+  ],
+  "GET /api/datasets/{id}/overview": {
+    "id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "name": "small",
+    "status": "READY",
+    "created_at": "2026-09-24T15:58:11.001+00:00",
+    "finished_at": "2026-09-24T15:58:11.269+00:00",
+    "file_bytes": 8817,
+    "feature_count": 33,
+    "imported_count": 33,
+    "import_millis": 253,
+    "type_counts": {
+      "source": 1,
+      "oks_future": 6,
+      "restriction": 9,
+      "heat_chamber": 3,
+      "heat_network": 5,
+      "oks_existing": 3,
+      "oks_connection_point": 6
+    },
+    "issue_counts": {
+      "restriction.unknown_type": 1
+    },
+    "bbox": [
+      37.61292606,
+      55.747515885
+    ],
+    "error": null,
+    "parent_id": null,
+    "root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "version": 1,
+    "edits": null,
+    "note": null,
+    "run_count": 2,
+    "lineage": [
+      {
+        "id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+        "version": 1,
+        "name": "small",
+        "note": null,
+        "edits": null
+      }
+    ],
+    "contents": {
+      "types": {
+        "heat_chamber": 3,
+        "heat_network": 5,
+        "oks_connection_point": 6,
+        "oks_existing": 3,
+        "oks_future": 6,
+        "restriction": 9,
+        "source": 1
+      },
+      "network_by_dn": [
+        {
+          "dn": 150,
+          "segments": 2,
+          "length_m": 500.0
+        },
+        {
+          "dn": 200,
+          "segments": 1,
+          "length_m": 200.0
+        }
+      ],
+      "oks": {
+        "count": 6,
+        "flow_total": 215.0,
+        "flow_min": 2.0,
+        "flow_max": 160.0
+      },
+      "restrictions": [
+        {
+          "type": "gas_pipeline",
+          "count": 1,
+          "edits": 0,
+          "title": "газопровод",
+          "known": true,
+          "rule": "можно пересечь спецпроходом, стоимость ×1,25; вдоль — не ближе 2 м"
+        },
+        {
+          "type": "road",
+          "count": 1,
+          "edits": 0,
+          "title": "дорога",
+          "known": true,
+          "rule": "можно пересечь спецпроходом под углом не меньше 45°, стоимость ×1,6; вдоль — не ближе 1,5 м"
+        }
+      ]
+    },
+    "issues": [
+      {
+        "code": "restriction.unknown_type",
+        "group": "assumption",
+        "title": "Тип ограничения не из справочника",
+        "meaning": "Правила для него нет — объект обходится с отступом 1 м.",
+        "param": "unknown_restrictions",
+        "severity": "WARNING",
+        "count": 1,
+        "whole_dataset": false
+      }
+    ],
+    "readiness": [
+      {
+        "id": "source",
+        "title": "Есть источник",
+        "ok": true,
+        "blocking": false,
+        "detail": "1 источник"
+      },
+      {
+        "id": "network",
+        "title": "Есть существующая сеть",
+        "ok": true,
+        "blocking": false,
+        "detail": "5 участков"
+      }
+    ]
+  },
+  "GET /api/datasets/{id}/bbox": [
+    37.61292606,
+    55.747515885
+  ],
+  "POST /api/datasets/{id}/versions": {
+    "id": "d10f11c7-634f-477f-ab34-c30c1e5aff87",
+    "status": "IMPORTING"
+  },
+  "PUT /api/datasets/{id}/edits": {
+    "id": "d10f11c7-634f-477f-ab34-c30c1e5aff87",
+    "name": "small",
+    "status": "IMPORTING",
+    "created_at": "2026-09-24T15:58:13.133+00:00",
+    "finished_at": "2026-09-24T15:58:13.262+00:00",
+    "file_bytes": 8817,
+    "feature_count": 34,
+    "imported_count": 34,
+    "import_millis": 127,
+    "type_counts": {
+      "source": 1,
+      "oks_future": 6,
+      "restriction": 10,
+      "heat_chamber": 3,
+      "heat_network": 5,
+      "oks_existing": 3,
+      "oks_connection_point": 6
+    },
+    "issue_counts": {
+      "edit.restriction_added": 1,
+      "restriction.unknown_type": 1
+    },
+    "bbox": [
+      37.61292606,
+      55.747515885
+    ],
+    "error": null,
+    "parent_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "version": 2,
+    "edits": [
+      {
+        "id": "edit-d10f11c7-1",
+        "op": "add_restriction",
+        "area_m2": 2515,
+        "comment": "стройплощадка до конца года",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                37.6203247245,
+                55.749276433
+              ],
+              [
+                37.62092472450001,
+                55.749276433
+              ],
+              [
+                37.62092472450001,
+                55.749876433000004
+              ]
+            ]
+          ]
+        },
+        "restriction_type": "prohibited_site"
+      }
+    ],
+    "note": "стройплощадка в центре района",
+    "run_count": 0
+  },
+  "GET /api/params": {
+    "classes": [
+      {
+        "id": "norm",
+        "title": "Правило",
+        "group_title": "Правила проектирования",
+        "description": "Правило или справочник технических требований. Не меняется."
+      },
+      {
+        "id": "interpretation",
+        "title": "Уточнение правила",
+        "group_title": "Как применяются правила",
+        "description": "Как сервис применяет правило, которое можно прочитать по-разному."
+      }
+    ],
+    "params": [
+      {
+        "key": "building_clearance",
+        "class": "norm",
+        "class_title": "Правило",
+        "title": "Отступ от существующих зданий",
+        "description": "Новая труба проходит не ближе этого расстояния от контура существующего здания. Чем больше ДУ, тем больше отступ.",
+        "source": "Технические требования, табл. 2",
+        "type": "fixed",
+        "editable": false,
+        "value": "5 м при ДУ до 500; 7 м при ДУ 500–900; 9 м при ДУ от 900"
+      },
+      {
+        "key": "restriction_rules",
+        "class": "norm",
+        "class_title": "Правило",
+        "title": "Правила для ограничений",
+        "description": "Что можно пересекать и как: запретные объекты обходятся с отступом, дороги, трамвай, газопровод и кабель пересекаются спецпроходом, который дороже обычной прокладки.",
+        "source": "Технические требования, табл. 2",
+        "type": "fixed",
+        "editable": false,
+        "value": "газопровод — можно пересечь спецпроходом, стоимость ×1,25; вдоль — не ближе 2 м; парк, сквер — обходить, не ближе 1 м; электрокабель — можно пересечь спецпроходом, стоимость ×1,15; вдоль — не ближе 2 м; запретная территория — обходить, не ближе 1 м; железная дорога — обходить, не ближе 1 м; дорога — можно пересечь спецпроходом под углом не меньше 45°, стоимость ×1,6; вдоль — не ближе 1,5 м; территория социального объекта — обходить, не ближе 1 м; трамвайные пути — можно пересечь спецпроходом под углом не меньше 45°, стоимость ×1,75; вдоль — не ближе 1,5 м; водный объект — обходить, не ближе 1 м"
+      }
+    ],
+    "restriction_types": [
+      {
+        "type": "gas_pipeline",
+        "title": "газопровод",
+        "rule": "можно пересечь спецпроходом, стоимость ×1,25; вдоль — не ближе 2 м",
+        "forbidden": false
+      },
+      {
+        "type": "park",
+        "title": "парк, сквер",
+        "rule": "обходить, не ближе 1 м",
+        "forbidden": true
+      }
+    ]
+  },
+  "GET /api/issue-catalog": {
+    "file.not_object": {
+      "code": "file.not_object",
+      "group": "problem",
+      "title": "Файл не является JSON-объектом",
+      "meaning": "Набор не прочитан.",
+      "param": null
+    },
+    "file.not_feature_collection": {
+      "code": "file.not_feature_collection",
+      "group": "problem",
+      "title": "Файл не является набором объектов GeoJSON",
+      "meaning": "Нужен один FeatureCollection.",
+      "param": null
+    },
+    "file.no_features": {
+      "code": "file.no_features",
+      "group": "problem",
+      "title": "В файле нет объектов",
+      "meaning": "Считать нечего.",
+      "param": null
+    },
+    "feature.not_object": {
+      "code": "feature.not_object",
+      "group": "problem",
+      "title": "Объект записан не как JSON-объект",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.no_properties": {
+      "code": "feature.no_properties",
+      "group": "problem",
+      "title": "У объекта нет атрибутов",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.no_id": {
+      "code": "feature.no_id",
+      "group": "problem",
+      "title": "У объекта нет идентификатора",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.unknown_object_type": {
+      "code": "feature.unknown_object_type",
+      "group": "problem",
+      "title": "Неизвестный тип объекта",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.no_geometry": {
+      "code": "feature.no_geometry",
+      "group": "problem",
+      "title": "У объекта нет геометрии",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.geometry_type": {
+      "code": "feature.geometry_type",
+      "group": "problem",
+      "title": "Геометрия не того вида",
+      "meaning": "Например, участок сети не линией. Объект пропущен.",
+      "param": null
+    },
+    "feature.bad_geometry": {
+      "code": "feature.bad_geometry",
+      "group": "problem",
+      "title": "Геометрия не читается",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.coordinates_out_of_range": {
+      "code": "feature.coordinates_out_of_range",
+      "group": "problem",
+      "title": "Координаты вне допустимого диапазона",
+      "meaning": "Ожидаются долгота и широта (EPSG:4326). Объект пропущен.",
+      "param": null
+    },
+    "feature.invalid_geometry": {
+      "code": "feature.invalid_geometry",
+      "group": "problem",
+      "title": "Невалидная геометрия",
+      "meaning": "Самопересечение контура, вырожденная линия и т. п. Объект не исправляется и в расчёт не берётся: исправьте геометрию во входном файле.",
+      "param": "invalid_geometry"
+    },
+    "feature.missing_attribute": {
+      "code": "feature.missing_attribute",
+      "group": "problem",
+      "title": "Нет обязательного атрибута",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.attribute_type": {
+      "code": "feature.attribute_type",
+      "group": "problem",
+      "title": "Атрибут не того типа",
+      "meaning": "Например, текст вместо числа. Объект пропущен.",
+      "param": null
+    },
+    "feature.negative_flow": {
+      "code": "feature.negative_flow",
+      "group": "problem",
+      "title": "Отрицательный расход",
+      "meaning": "Объект пропущен.",
+      "param": null
+    },
+    "feature.duplicate_id": {
+      "code": "feature.duplicate_id",
+      "group": "problem",
+      "title": "Повторяющийся идентификатор",
+      "meaning": "Ссылки на такой объект неоднозначны.",
+      "param": null
+    },
+    "network.empty": {
+      "code": "network.empty",
+      "group": "problem",
+      "title": "Нет существующей сети",
+      "meaning": "Подключаться некуда.",
+      "param": null
+    },
+    "network.no_source": {
+      "code": "network.no_source",
+      "group": "problem",
+      "title": "Нет источника",
+      "meaning": "Нельзя определить, куда идёт расход.",
+      "param": null
+    },
+    "network.many_sources": {
+      "code": "network.many_sources",
+      "group": "problem",
+      "title": "Несколько источников",
+      "meaning": "Используется один из них.",
+      "param": null
+    },
+    "network.bad_upstream_ref": {
+      "code": "network.bad_upstream_ref",
+      "group": "problem",
+      "title": "Ссылка на несуществующий объект сети",
+      "meaning": "Цепочка к источнику обрывается.",
+      "param": null
+    },
+    "network.chain_broken": {
+      "code": "network.chain_broken",
+      "group": "problem",
+      "title": "Цепочка к источнику обрывается",
+      "meaning": "К этой части сети не присоединяемся.",
+      "param": null
+    },
+    "network.chain_cycle": {
+      "code": "network.chain_cycle",
+      "group": "problem",
+      "title": "Цепочка к источнику замкнута в кольцо",
+      "meaning": "К этой части сети не присоединяемся.",
+      "param": null
+    },
+    "network.topology_derived": {
+      "code": "network.topology_derived",
+      "group": "assumption",
+      "title": "Направление к источнику выведено по геометрии",
+      "meaning": "Ссылок участков друг на друга в данных нет: участки связаны по совпадающим концам.",
+      "param": "network_direction"
+    },
+    "network.flow_assumed": {
+      "code": "network.flow_assumed",
+      "group": "assumption",
+      "title": "Расход существующей сети неизвестен",
+      "meaning": "Взят по настройке расчёта; влияет только на слой нехватки пропускной способности, не на трассы и стоимость.",
+      "param": "existing_flow"
+    },
+    "network.chamber_dn_assumed": {
+      "code": "network.chamber_dn_assumed",
+      "group": "assumption",
+      "title": "ДУ камеры взят по примыкающим участкам",
+      "meaning": "У камеры нет диаметра в данных — взят наибольший ДУ примыкающих участков.",
+      "param": "chamber_dn"
+    },
+    "network.no_upstream": {
+      "code": "network.no_upstream",
+      "group": "problem",
+      "title": "Объект сети не связан с источником",
+      "meaning": "Присоединяться к нему не к чему: тепло по нему не придёт.",
+      "param": null
+    },
+    "network.detached_part": {
+      "code": "network.detached_part",
+      "group": "problem",
+      "title": "Часть сети не связана с источником",
+      "meaning": "Присоединения к ней не делаются: тепло по ней не придёт.",
+      "param": null
+    },
+    "network.source_not_on_network": {
+      "code": "network.source_not_on_network",
+      "group": "problem",
+      "title": "Источник не стоит на сети",
+      "meaning": "Сеть направлена от ближайшего к источнику конца участка.",
+      "param": null
+    },
+    "network.upstream_not_adjacent": {
+      "code": "network.upstream_not_adjacent",
+      "group": "note",
+      "title": "Объект «к источнику» не примыкает к участку",
+      "meaning": "Связь взята из данных как есть.",
+      "param": null
+    },
+    "network.chamber_gap": {
+      "code": "network.chamber_gap",
+      "group": "note",
+      "title": "Камера немного в стороне от конца участка",
+      "meaning": "Зазор до 2 м — камера привязана к участку.",
+      "param": null
+    },
+    "network.chamber_inside_segment": {
+      "code": "network.chamber_inside_segment",
+      "group": "note",
+      "title": "Линия сети проходит через камеру без разрыва",
+      "meaning": "У камеры считаются две стороны участка.",
+      "param": null
+    },
+    "network.dn_decreases_upstream": {
+      "code": "network.dn_decreases_upstream",
+      "group": "note",
+      "title": "ДУ уменьшается в сторону источника",
+      "meaning": "Необычно для сети, но расчёту не мешает.",
+      "param": null
+    },
+    "network.nonstandard_dn": {
+      "code": "network.nonstandard_dn",
+      "group": "note",
+      "title": "Нестандартный ДУ",
+      "meaning": "Для расчётов взят ближайший больший ДУ из таблицы.",
+      "param": null
+    },
+    "oks.no_flow": {
+      "code": "oks.no_flow",
+      "group": "problem",
+      "title": "У ОКС нет расхода",
+      "meaning": "ОКС не подключается.",
+      "param": null
+    },
+    "oks.no_connection_point": {
+      "code": "oks.no_connection_point",
+      "group": "problem",
+      "title": "У ОКС нет точки подключения",
+      "meaning": "ОКС не подключается.",
+      "param": null
+    },
+    "oks.connection_point_orphan": {
+      "code": "oks.connection_point_orphan",
+      "group": "problem",
+      "title": "Точка подключения без ОКС",
+      "meaning": "Точка не используется.",
+      "param": null
+    },
+    "oks.many_connection_points": {
+      "code": "oks.many_connection_points",
+      "group": "note",
+      "title": "У ОКС несколько точек подключения",
+      "meaning": "Используется одна.",
+      "param": null
+    },
+    "oks.connection_point_inside": {
+      "code": "oks.connection_point_inside",
+      "group": "note",
+      "title": "Точка подключения внутри контура ОКС",
+      "meaning": "Трасса подходит к контуру и заходит к точке.",
+      "param": null
+    },
+    "oks.connection_point_off_boundary": {
+      "code": "oks.connection_point_off_boundary",
+      "group": "note",
+      "title": "Точка подключения в стороне от контура ОКС",
+      "meaning": "Трасса приходит в саму точку.",
+      "param": null
+    },
+    "oks.building_from_restriction": {
+      "code": "oks.building_from_restriction",
+      "group": "assumption",
+      "title": "Здание ОКС найдено среди ограничений",
+      "meaning": "Контура ОКС в данных нет — взято здание, внутри которого лежит точка подключения.",
+      "param": "oks_building"
+    },
+    "oks.point_without_building": {
+      "code": "oks.point_without_building",
+      "group": "assumption",
+      "title": "Точка подключения не внутри здания",
+      "meaning": "Трасса приходит в саму точку.",
+      "param": "oks_building"
+    },
+    "oks.flow_exceeds_max_dn": {
+      "code": "oks.flow_exceeds_max_dn",
+      "group": "problem",
+      "title": "Расход ОКС больше пропускной способности наибольшего ДУ",
+      "meaning": "ОКС не подключается.",
+      "param": null
+    },
+    "restriction.building": {
+      "code": "restriction.building",
+      "group": "assumption",
+      "title": "Контуры ОКС приходят ограничениями",
+      "meaning": "Тип oks: пересекать нельзя, отступ 5/7/9 м по ДУ.",
+      "param": "building_restrictions"
+    },
+    "restriction.unknown_type": {
+      "code": "restriction.unknown_type",
+      "group": "assumption",
+      "title": "Тип ограничения не из справочника",
+      "meaning": "Правила для него нет — объект обходится с отступом 1 м.",
+      "param": "unknown_restrictions"
+    },
+    "edit.restriction_added": {
+      "code": "edit.restriction_added",
+      "group": "note",
+      "title": "Ограничение добавлено вручную",
+      "meaning": "Правка входных данных в этой версии набора.",
+      "param": null
+    },
+    "edit.object_removed": {
+      "code": "edit.object_removed",
+      "group": "note",
+      "title": "Объект исключён вручную",
+      "meaning": "Правка входных данных в этой версии набора: объект родительского набора в расчёт не берётся.",
+      "param": null
+    },
+    "edit.attribute_changed": {
+      "code": "edit.attribute_changed",
+      "group": "note",
+      "title": "Атрибут объекта изменён вручную",
+      "meaning": "Правка входных данных в этой версии набора: расчёт идёт по новому значению.",
+      "param": null
+    },
+    "recon.flow_exceeds_max_dn": {
+      "code": "recon.flow_exceeds_max_dn",
+      "group": "note",
+      "title": "Расход на существующем участке больше наибольшего ДУ",
+      "meaning": "Нехватка пропускной способности посчитана по наибольшему ДУ.",
+      "param": null
+    },
+    "route.dn_increased_for_length": {
+      "code": "route.dn_increased_for_length",
+      "group": "note",
+      "title": "ДУ увеличен на одну номенклатуру из-за предельной длины",
+      "meaning": "Трасса длиннее предела минимального ДУ.",
+      "param": "length_limit"
+    },
+    "route.not_found": {
+      "code": "route.not_found",
+      "group": "problem",
+      "title": "Трасса не найдена",
+      "meaning": "ОКС остался без трассы.",
+      "param": null
+    },
+    "route.search_limit": {
+      "code": "route.search_limit",
+      "group": "problem",
+      "title": "Поиск трассы остановлен по пределу",
+      "meaning": "ОКС остался без трассы.",
+      "param": "search_limits"
+    },
+    "route.vertices_truncated": {
+      "code": "route.vertices_truncated",
+      "group": "note",
+      "title": "Поиск ограничен по числу точек поворота",
+      "meaning": "Трасса может быть не самой выгодной.",
+      "param": "search_limits"
+    }
+  },
+  "GET /api/run-params": {
+    "existing_flow": "ZERO",
+    "existing_flow_share": 0.5,
+    "turn_penalty": 0.15,
+    "extra_clearance_m": 0.0,
+    "min_crossing_angle_deg": 45.0,
+    "turn_angles": "45_90",
+    "turn_angles_strict": false,
+    "joint_connection": true
+  },
+  "POST /api/datasets/{id}/runs": {
+    "id": "b0bdf216-fa81-4405-b062-c2022b690200",
+    "status": "QUEUED"
+  },
+  "GET /api/datasets/{id}/runs": [
+    {
+      "id": "a7eb5c73-dbe7-4291-a7a9-f079834cf08f",
+      "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "status": "CANCELLED",
+      "created_at": "2026-09-24T15:58:15.213+00:00",
+      "started_at": "2026-09-24T15:58:15.214+00:00",
+      "finished_at": "2026-09-24T15:58:15.306+00:00",
+      "params": {
+        "turn_angles": "45_90",
+        "turn_penalty": 0.15,
+        "existing_flow": "ZERO",
+        "joint_connection": true,
+        "extra_clearance_m": 0.0,
+        "turn_angles_strict": false,
+        "existing_flow_share": 0.5,
+        "min_crossing_angle_deg": 45.0
+      },
+      "best_score": null,
+      "validation_errors": null,
+      "error": null,
+      "name": "Расчёт от 24.09 18:58",
+      "note": null,
+      "pinned": false,
+      "dataset_version": 1,
+      "variants": null
+    },
+    {
+      "id": "b0bdf216-fa81-4405-b062-c2022b690200",
+      "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "status": "DONE",
+      "created_at": "2026-09-24T15:58:12.071+00:00",
+      "started_at": "2026-09-24T15:58:12.079+00:00",
+      "finished_at": "2026-09-24T15:58:12.672+00:00",
+      "params": {
+        "turn_angles": "45_90",
+        "turn_penalty": 0.15,
+        "existing_flow": "ZERO",
+        "joint_connection": true,
+        "extra_clearance_m": 0.0,
+        "turn_angles_strict": false,
+        "existing_flow_share": 0.5,
+        "min_crossing_angle_deg": 45.0
+      },
+      "best_score": 6.56243231172,
+      "validation_errors": 0,
+      "error": null,
+      "name": "прямые трассы",
+      "note": "штраф за поворот 0,15",
+      "pinned": true,
+      "dataset_version": 1,
+      "variants": 3
+    }
+  ],
+  "GET /api/runs/{id}": {
+    "id": "b0bdf216-fa81-4405-b062-c2022b690200",
+    "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "status": "DONE",
+    "created_at": "2026-09-24T15:58:12.071+00:00",
+    "started_at": "2026-09-24T15:58:12.079+00:00",
+    "finished_at": "2026-09-24T15:58:12.672+00:00",
+    "result_bytes": 21866,
+    "params": {
+      "turn_angles": "45_90",
+      "turn_penalty": 0.15,
+      "existing_flow": "ZERO",
+      "joint_connection": true,
+      "extra_clearance_m": 0.0,
+      "turn_angles_strict": false,
+      "existing_flow_share": 0.5,
+      "min_crossing_angle_deg": 45.0
+    },
+    "summary": [
+      {
+        "oks": [
+          {
+            "joins": "junction",
+            "turns": 0,
+            "oks_id": "oks-1",
+            "diameter": 80,
+            "flow_tph": 10.0,
+            "own_cost": 1198655.5,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v1-ch-2",
+            "own_length": 14.35,
+            "path_length": 120.0,
+            "shared_with": [
+              "oks-6"
+            ],
+            "tie_object_id": "m1",
+            "existing_chain": [
+              "m1"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v1-seg-6",
+              "v1-seg-7"
+            ]
+          },
+          {
+            "joins": "tie_in",
+            "turns": 2,
+            "oks_id": "oks-2",
+            "diameter": 125,
+            "flow_tph": 30.0,
+            "own_cost": 9830514.23,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v1-ch-1",
+            "own_length": 101.06,
+            "path_length": 101.06,
+            "shared_with": [],
+            "tie_object_id": "b1",
+            "existing_chain": [
+              "b1",
+              "k2"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v1-seg-2"
+            ]
+          }
+        ],
+        "rank": 1,
+        "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 4 участках существующей сети (ДУ 150 → 200, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 555 м, стоимость 175,0 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб.",
+        "score": 6.56243231172,
+        "turns": 5,
+        "routes": 5,
+        "tie_ins": 4,
+        "approach": "Совместное подключение без врезки в m4 (основная врезка лучшего варианта)",
+        "strategy": "joint-alt",
+        "variant_id": "1",
+        "explanation": "Совместное подключение без врезки в m4 (основная врезка лучшего варианта). Частей сети (врезок): 4, камер-разветвлений: 1, ОКС без трассы: 1",
+        "plan_millis": 429,
+        "sharp_turns": 0,
+        "small_turns": 0,
+        "unconnected": [
+          {
+            "detail": "радиус поиска 2112 м, ДУ 65, до сети 205 м",
+            "oks_id": "oks-5",
+            "reason": "NO_ROUTE",
+            "flow_tph": 8.0,
+            "reason_text": "нет допустимой трассы в радиусе поиска: мешают ограничения"
+          }
+        ],
+        "new_chambers": 3,
+        "segment_cost": 49953403.99000001,
+        "turns_per_km": 9.015848057715852,
+        "network_parts": 4,
+        "min_straight_m": 5.656870084647931,
+        "calculated_cost": 174953403.99,
+        "technical_nodes": 6,
+        "max_detour_ratio": 1.1741522945747165,
+        "special_segments": 3,
+        "construction_cost": 70953403.99000001,
+        "mean_detour_ratio": 1.0680911778775997,
+        "branching_chambers": 1,
+        "new_network_length": 554.5790000000001,
+        "capacity_shortfalls": 5,
+        "unconnected_oks_ids": [
+          "oks-5"
+        ],
+        "unconnected_penalty": 104000000,
+        "chamber_construction_cost": 11000000,
+        "existing_chamber_tie_in_cost": 10000000,
+        "existing_chamber_tie_in_count": 2
+      },
+      {
+        "oks": [
+          {
+            "joins": "junction",
+            "turns": 0,
+            "oks_id": "oks-1",
+            "diameter": 80,
+            "flow_tph": 10.0,
+            "own_cost": 1198655.5,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v2-ch-3",
+            "own_length": 14.35,
+            "path_length": 120.0,
+            "shared_with": [
+              "oks-6"
+            ],
+            "tie_object_id": "m1",
+            "existing_chain": [
+              "m1"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v2-seg-6",
+              "v2-seg-7"
+            ]
+          },
+          {
+            "joins": "tie_in",
+            "turns": 2,
+            "oks_id": "oks-2",
+            "diameter": 125,
+            "flow_tph": 30.0,
+            "own_cost": 9830514.23,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v2-ch-2",
+            "own_length": 101.06,
+            "path_length": 101.06,
+            "shared_with": [],
+            "tie_object_id": "b1",
+            "existing_chain": [
+              "b1",
+              "k2"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v2-seg-2"
+            ]
+          }
+        ],
+        "rank": 2,
+        "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 5 участках существующей сети (ДУ 150 → 200, ДУ 150 → 250, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 565 м, стоимость 176,4 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб.",
+        "score": 6.63554352664,
+        "turns": 4,
+        "routes": 5,
+        "tie_ins": 4,
+        "approach": "Совместное подключение, ОКС присоединяются от ближних к сети",
+        "strategy": "joint",
+        "variant_id": "2",
+        "explanation": "Совместное подключение, ОКС присоединяются от ближних к сети. Частей сети (врезок): 4, камер-разветвлений: 1, ОКС без трассы: 1",
+        "plan_millis": 429,
+        "sharp_turns": 0,
+        "small_turns": 0,
+        "unconnected": [
+          {
+            "detail": "радиус поиска 2112 м, ДУ 65, до сети 205 м",
+            "oks_id": "oks-5",
+            "reason": "NO_ROUTE",
+            "flow_tph": 8.0,
+            "reason_text": "нет допустимой трассы в радиусе поиска: мешают ограничения"
+          }
+        ],
+        "new_chambers": 4,
+        "segment_cost": 51410697.379999995,
+        "turns_per_km": 7.075288141109546,
+        "network_parts": 4,
+        "min_straight_m": 7.071156584900003,
+        "calculated_cost": 176410697.38,
+        "technical_nodes": 6,
+        "max_detour_ratio": 1.1741522945747165,
+        "special_segments": 3,
+        "construction_cost": 72410697.38,
+        "mean_detour_ratio": 1.058896769974931,
+        "branching_chambers": 1,
+        "new_network_length": 565.3480000000001,
+        "capacity_shortfalls": 6,
+        "unconnected_oks_ids": [
+          "oks-5"
+        ],
+        "unconnected_penalty": 104000000,
+        "chamber_construction_cost": 16000000,
+        "existing_chamber_tie_in_cost": 5000000.0,
+        "existing_chamber_tie_in_count": 1
+      }
+    ],
+    "validation": {
+      "errors": 0,
+      "checked": {
+        "R-SUM": 3,
+        "R-TIE": 13,
+        "R-VAR": 3,
+        "R-SPEC": 24,
+        "R-TOPO": 39,
+        "R-TURN": 35,
+        "R-NET-1": 18,
+        "R-NET-7": 39,
+        "R-NET-8": 39,
+        "R-RESTR": 39,
+        "R-TIE-3": 11,
+        "R-NET-10": 39
+      },
+      "warnings": 0,
+      "violations": []
+    },
+    "diagnostics": {
+      "counts": {
+        "route.not_found": 1,
+        "route.dn_increased_for_length": 1
+      },
+      "issues": [
+        "WARNING route.not_found [oks-5]: No automatic route found for OKS: NO_ROUTE",
+        "WARNING route.dn_increased_for_length [oks-6]: Route 266.6 m > limit 181 m of DN 50, DN increased to 80"
+      ]
+    },
+    "error": null,
+    "name": "прямые трассы",
+    "note": "штраф за поворот 0,15",
+    "pinned": true,
+    "dataset_name": "small",
+    "dataset_version": 1,
+    "dataset_parent_id": null,
+    "dataset_root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c"
+  },
+  "POST /api/runs/{id}/cancel": {
+    "id": "a7eb5c73-dbe7-4291-a7a9-f079834cf08f",
+    "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "status": "RUNNING",
+    "created_at": "2026-09-24T15:58:15.213+00:00",
+    "started_at": "2026-09-24T15:58:15.214+00:00",
+    "finished_at": null,
+    "result_bytes": null,
+    "params": {
+      "turn_angles": "45_90",
+      "turn_penalty": 0.15,
+      "existing_flow": "ZERO",
+      "joint_connection": true,
+      "extra_clearance_m": 0.0,
+      "turn_angles_strict": false,
+      "existing_flow_share": 0.5,
+      "min_crossing_angle_deg": 45.0
+    },
+    "summary": null,
+    "validation": null,
+    "diagnostics": null,
+    "error": null,
+    "name": "Расчёт от 24.09 18:58",
+    "note": null,
+    "pinned": false,
+    "dataset_name": "small",
+    "dataset_version": 1,
+    "dataset_parent_id": null,
+    "dataset_root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "progress": {
+      "stage": "построение вариантов",
+      "done": 19,
+      "total": 24
+    }
+  },
+  "PATCH /api/runs/{id}": {
+    "id": "b0bdf216-fa81-4405-b062-c2022b690200",
+    "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+    "status": "DONE",
+    "created_at": "2026-09-24T15:58:12.071+00:00",
+    "started_at": "2026-09-24T15:58:12.079+00:00",
+    "finished_at": "2026-09-24T15:58:12.672+00:00",
+    "result_bytes": 21866,
+    "params": {
+      "turn_angles": "45_90",
+      "turn_penalty": 0.15,
+      "existing_flow": "ZERO",
+      "joint_connection": true,
+      "extra_clearance_m": 0.0,
+      "turn_angles_strict": false,
+      "existing_flow_share": 0.5,
+      "min_crossing_angle_deg": 45.0
+    },
+    "summary": [
+      {
+        "oks": [
+          {
+            "joins": "junction",
+            "turns": 0,
+            "oks_id": "oks-1",
+            "diameter": 80,
+            "flow_tph": 10.0,
+            "own_cost": 1198655.5,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v1-ch-2",
+            "own_length": 14.35,
+            "path_length": 120.0,
+            "shared_with": [
+              "oks-6"
+            ],
+            "tie_object_id": "m1",
+            "existing_chain": [
+              "m1"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v1-seg-6",
+              "v1-seg-7"
+            ]
+          },
+          {
+            "joins": "tie_in",
+            "turns": 2,
+            "oks_id": "oks-2",
+            "diameter": 125,
+            "flow_tph": 30.0,
+            "own_cost": 9830514.23,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v1-ch-1",
+            "own_length": 101.06,
+            "path_length": 101.06,
+            "shared_with": [],
+            "tie_object_id": "b1",
+            "existing_chain": [
+              "b1",
+              "k2"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v1-seg-2"
+            ]
+          }
+        ],
+        "rank": 1,
+        "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 4 участках существующей сети (ДУ 150 → 200, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 555 м, стоимость 175,0 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб.",
+        "score": 6.56243231172,
+        "turns": 5,
+        "routes": 5,
+        "tie_ins": 4,
+        "approach": "Совместное подключение без врезки в m4 (основная врезка лучшего варианта)",
+        "strategy": "joint-alt",
+        "variant_id": "1",
+        "explanation": "Совместное подключение без врезки в m4 (основная врезка лучшего варианта). Частей сети (врезок): 4, камер-разветвлений: 1, ОКС без трассы: 1",
+        "plan_millis": 429,
+        "sharp_turns": 0,
+        "small_turns": 0,
+        "unconnected": [
+          {
+            "detail": "радиус поиска 2112 м, ДУ 65, до сети 205 м",
+            "oks_id": "oks-5",
+            "reason": "NO_ROUTE",
+            "flow_tph": 8.0,
+            "reason_text": "нет допустимой трассы в радиусе поиска: мешают ограничения"
+          }
+        ],
+        "new_chambers": 3,
+        "segment_cost": 49953403.99000001,
+        "turns_per_km": 9.015848057715852,
+        "network_parts": 4,
+        "min_straight_m": 5.656870084647931,
+        "calculated_cost": 174953403.99,
+        "technical_nodes": 6,
+        "max_detour_ratio": 1.1741522945747165,
+        "special_segments": 3,
+        "construction_cost": 70953403.99000001,
+        "mean_detour_ratio": 1.0680911778775997,
+        "branching_chambers": 1,
+        "new_network_length": 554.5790000000001,
+        "capacity_shortfalls": 5,
+        "unconnected_oks_ids": [
+          "oks-5"
+        ],
+        "unconnected_penalty": 104000000,
+        "chamber_construction_cost": 11000000,
+        "existing_chamber_tie_in_cost": 10000000,
+        "existing_chamber_tie_in_count": 2
+      },
+      {
+        "oks": [
+          {
+            "joins": "junction",
+            "turns": 0,
+            "oks_id": "oks-1",
+            "diameter": 80,
+            "flow_tph": 10.0,
+            "own_cost": 1198655.5,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v2-ch-3",
+            "own_length": 14.35,
+            "path_length": 120.0,
+            "shared_with": [
+              "oks-6"
+            ],
+            "tie_object_id": "m1",
+            "existing_chain": [
+              "m1"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v2-seg-6",
+              "v2-seg-7"
+            ]
+          },
+          {
+            "joins": "tie_in",
+            "turns": 2,
+            "oks_id": "oks-2",
+            "diameter": 125,
+            "flow_tph": 30.0,
+            "own_cost": 9830514.23,
+            "specials": [],
+            "connected": true,
+            "tie_in_id": "v2-ch-2",
+            "own_length": 101.06,
+            "path_length": 101.06,
+            "shared_with": [],
+            "tie_object_id": "b1",
+            "existing_chain": [
+              "b1",
+              "k2"
+            ],
+            "tie_object_type": "heat_network",
+            "path_segment_ids": [
+              "v2-seg-2"
+            ]
+          }
+        ],
+        "rank": 2,
+        "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 5 участках существующей сети (ДУ 150 → 200, ДУ 150 → 250, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 565 м, стоимость 176,4 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб.",
+        "score": 6.63554352664,
+        "turns": 4,
+        "routes": 5,
+        "tie_ins": 4,
+        "approach": "Совместное подключение, ОКС присоединяются от ближних к сети",
+        "strategy": "joint",
+        "variant_id": "2",
+        "explanation": "Совместное подключение, ОКС присоединяются от ближних к сети. Частей сети (врезок): 4, камер-разветвлений: 1, ОКС без трассы: 1",
+        "plan_millis": 429,
+        "sharp_turns": 0,
+        "small_turns": 0,
+        "unconnected": [
+          {
+            "detail": "радиус поиска 2112 м, ДУ 65, до сети 205 м",
+            "oks_id": "oks-5",
+            "reason": "NO_ROUTE",
+            "flow_tph": 8.0,
+            "reason_text": "нет допустимой трассы в радиусе поиска: мешают ограничения"
+          }
+        ],
+        "new_chambers": 4,
+        "segment_cost": 51410697.379999995,
+        "turns_per_km": 7.075288141109546,
+        "network_parts": 4,
+        "min_straight_m": 7.071156584900003,
+        "calculated_cost": 176410697.38,
+        "technical_nodes": 6,
+        "max_detour_ratio": 1.1741522945747165,
+        "special_segments": 3,
+        "construction_cost": 72410697.38,
+        "mean_detour_ratio": 1.058896769974931,
+        "branching_chambers": 1,
+        "new_network_length": 565.3480000000001,
+        "capacity_shortfalls": 6,
+        "unconnected_oks_ids": [
+          "oks-5"
+        ],
+        "unconnected_penalty": 104000000,
+        "chamber_construction_cost": 16000000,
+        "existing_chamber_tie_in_cost": 5000000.0,
+        "existing_chamber_tie_in_count": 1
+      }
+    ],
+    "validation": {
+      "errors": 0,
+      "checked": {
+        "R-SUM": 3,
+        "R-TIE": 13,
+        "R-VAR": 3,
+        "R-SPEC": 24,
+        "R-TOPO": 39,
+        "R-TURN": 35,
+        "R-NET-1": 18,
+        "R-NET-7": 39,
+        "R-NET-8": 39,
+        "R-RESTR": 39,
+        "R-TIE-3": 11,
+        "R-NET-10": 39
+      },
+      "warnings": 0,
+      "violations": []
+    },
+    "diagnostics": {
+      "counts": {
+        "route.not_found": 1,
+        "route.dn_increased_for_length": 1
+      },
+      "issues": [
+        "WARNING route.not_found [oks-5]: No automatic route found for OKS: NO_ROUTE",
+        "WARNING route.dn_increased_for_length [oks-6]: Route 266.6 m > limit 181 m of DN 50, DN increased to 80"
+      ]
+    },
+    "error": null,
+    "name": "прямые трассы",
+    "note": "штраф за поворот 0,15",
+    "pinned": true,
+    "dataset_name": "small",
+    "dataset_version": 1,
+    "dataset_parent_id": null,
+    "dataset_root_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c"
+  },
+  "GET /api/runs/{id}/validation": {
+    "errors": 0,
+    "checked": {
+      "R-SUM": 3,
+      "R-TIE": 13,
+      "R-VAR": 3,
+      "R-SPEC": 24,
+      "R-TOPO": 39,
+      "R-TURN": 35,
+      "R-NET-1": 18,
+      "R-NET-7": 39,
+      "R-NET-8": 39,
+      "R-RESTR": 39,
+      "R-TIE-3": 11,
+      "R-NET-10": 39
+    },
+    "warnings": 0,
+    "violations": []
+  },
+  "GET /api/runs/{id}/journal": {
+    "run_id": "b0bdf216-fa81-4405-b062-c2022b690200",
+    "status": "DONE",
+    "live": false,
+    "variant": "1",
+    "events": [
+      {
+        "seq": 0,
+        "type": "start",
+        "strategy": "joint-alt",
+        "explanation": "Совместное подключение без врезки в m4 (основная врезка лучшего варианта)",
+        "order": [
+          "oks-4",
+          "oks-2"
+        ],
+        "oks": [
+          {
+            "id": "oks-4",
+            "flow_tph": 160.0,
+            "point": [
+              37.6234755,
+              55.7487077
+            ]
+          },
+          {
+            "id": "oks-2",
+            "flow_tph": 30.0,
+            "point": [
+              37.6215489,
+              55.7509327
+            ]
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "type": "connect",
+        "oks": "oks-4",
+        "flow_tph": 160.0,
+        "route": {
+          "coords": [
+            [
+              37.6235298,
+              55.7489779
+            ],
+            [
+              37.6234673,
+              55.7489412
+            ]
+          ],
+          "dn": 250,
+          "length": 31.66,
+          "turns": 1,
+          "score": 0.5049,
+          "target": {
+            "kind": "tie_chamber",
+            "object_id": "k3",
+            "point": [
+              37.6235298,
+              55.7489779
+            ]
+          }
+        },
+        "alternatives": [
+          {
+            "kind": "tie_chamber",
+            "object_id": "k3",
+            "point": [
+              37.6235298,
+              55.7489779
+            ],
+            "score": 0.5049,
+            "chosen": true,
+            "estimate": false
+          }
+        ],
+        "edges_removed": [],
+        "edges": [
+          {
+            "id": 3,
+            "coords": [
+              [
+                37.6235298,
+                55.7489779
+              ],
+              [
+                37.6234673,
+                55.7489412
+              ]
+            ],
+            "dn": 250,
+            "flow_tph": 160.0,
+            "special": []
+          }
+        ],
+        "nodes": [
+          {
+            "id": 2,
+            "kind": "tie",
+            "point": [
+              37.6235298,
+              55.7489779
+            ],
+            "object_id": "k3",
+            "object_type": "heat_chamber",
+            "flow_tph": 160.0
+          }
+        ],
+        "recon": [
+          {
+            "segment": "m1",
+            "coords": [
+              [
+                37.6139741,
+                55.7488705
+              ],
+              [
+                37.6171593,
+                55.7489064
+              ]
+            ],
+            "existing_dn": 400,
+            "required_dn": 500,
+            "added_flow_tph": 160.0
+          },
+          {
+            "segment": "m2",
+            "coords": [
+              [
+                37.6171593,
+                55.7489064
+              ],
+              [
+                37.6203445,
+                55.7489422
+              ]
+            ],
+            "existing_dn": 300,
+            "required_dn": 400,
+            "added_flow_tph": 160.0
+          }
+        ],
+        "connected": 1,
+        "network_length": 31.66
+      }
+    ],
+    "next": 8
+  },
+  "GET /api/runs/{id}/oks/{oksId}/search": {
+    "run_id": "b0bdf216-fa81-4405-b062-c2022b690200",
+    "oks_id": "oks-1",
+    "millis": 5,
+    "radius_m": 392,
+    "attempts": 1,
+    "limit_reached": false,
+    "max_expansions": 20000,
+    "vertices": [
+      [
+        37.615847,
+        55.7499699
+      ],
+      [
+        37.6148186,
+        55.749458
+      ]
+    ],
+    "starts": 1,
+    "connection_point": [
+      37.615847,
+      55.7499699
+    ],
+    "expansions": [
+      [
+        0,
+        -1
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    "rejected": [],
+    "rejected_kinds": [],
+    "rejected_by_kind": [],
+    "zones": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "kind": "oks_existing",
+            "title": "существующее здание"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  37.614821,
+                  55.7494593
+                ],
+                [
+                  37.6148079,
+                  55.7498282
+                ],
+                [
+                  37.6156213,
+                  55.7498374
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "kind": "oks_existing",
+            "title": "существующее здание"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  37.6160154,
+                  55.7494728
+                ],
+                [
+                  37.6160024,
+                  55.7498417
+                ],
+                [
+                  37.6168157,
+                  55.7498509
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "corridors": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "kind": "power_cable",
+            "title": "электрокабель"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  37.6221995,
+                  55.7495022
+                ],
+                [
+                  37.6222,
+                  55.7495063
+                ],
+                [
+                  37.622202,
+                  55.7495102
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "kind": "gas_pipeline",
+            "title": "газопровод"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  37.6200078,
+                  55.7494545
+                ],
+                [
+                  37.6200154,
+                  55.7494542
+                ],
+                [
+                  37.6200227,
+                  55.749453
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "route": {
+      "coords": [
+        [
+          37.6158852,
+          55.748892
+        ],
+        [
+          37.615847,
+          55.7499699
+        ]
+      ],
+      "length": 120.0,
+      "target_object_id": "m1",
+      "target_kind": "tie_segment"
+    }
+  },
+  "GET /api/compare": {
+    "a": {
+      "run_id": "b0bdf216-fa81-4405-b062-c2022b690200",
+      "variant_id": "1",
+      "rank": 1,
+      "name": "прямые трассы",
+      "created_at": "2026-09-24T15:58:12.071+00:00",
+      "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "dataset_name": "small",
+      "dataset_version": 1,
+      "strategy": "joint-alt",
+      "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 4 участках существующей сети (ДУ 150 → 200, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 555 м, стоимость 175,0 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб."
+    },
+    "b": {
+      "run_id": "b0bdf216-fa81-4405-b062-c2022b690200",
+      "variant_id": "2",
+      "rank": 2,
+      "name": "прямые трассы",
+      "created_at": "2026-09-24T15:58:12.071+00:00",
+      "dataset_id": "6299246b-0b2f-4b5c-a70b-b78af7ba8f5c",
+      "dataset_name": "small",
+      "dataset_version": 1,
+      "strategy": "joint",
+      "plain": "5 из 6 ОКС подключены через 4 врезки, 1 камеру-разветвление. Справочно: пропускной способности не хватит на 5 участках существующей сети (ДУ 150 → 200, ДУ 150 → 250, ДУ 200 → 300, ДУ 300 → 400, ДУ 400 → 500). Новая сеть 565 м, стоимость 176,4 млн руб., из них штраф за неподключённые ОКС 104,0 млн руб."
+    },
+    "metrics": [
+      {
+        "key": "score",
+        "title": "Оценка S",
+        "unit": "",
+        "a": 6.56243231172,
+        "b": 6.63554352664,
+        "delta": 0.07311121491999995,
+        "better": "a"
+      },
+      {
+        "key": "calculated_cost",
+        "title": "Стоимость",
+        "unit": "руб.",
+        "a": 174953403.99,
+        "b": 176410697.38,
+        "delta": 1457293.3899999857,
+        "better": "a"
+      }
+    ],
+    "params": [],
+    "data": {
+      "same_dataset": true,
+      "same_family": true,
+      "edits_only_a": [],
+      "edits_only_b": []
+    },
+    "geometry": {
+      "tolerance_m": 1.0,
+      "common_length": 524.3,
+      "only_a_length": 30.2,
+      "only_b_length": 41.0
+    },
+    "explanation": "Вариант А лучше на 0,07 единицы S: дешевле на 1,5 млн руб. (вклад в S 0,04), короче на 11 м (вклад 0,03). Больше всего разница в статьях: новые камеры −5,0 млн, врезки в существующие камеры +5,0 млн, новые участки −1,5 млн."
+  },
+  "GET /api/runs/{id}/variants/{variant}.geojson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "id": "v1-ch-1",
+        "properties": {
+          "id": "v1-ch-1",
+          "cost": 3000000.0,
+          "diameter": 150,
+          "variant_id": "1",
+          "object_type": "heat_chamber",
+          "derived": false
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            37.6202647,
+            55.75120357
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "id": "v1-ch-2",
+        "properties": {
+          "id": "v1-ch-2",
+          "cost": 5000000.0,
+          "diameter": 400,
+          "variant_id": "1",
+          "object_type": "heat_chamber",
+          "derived": false
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            37.6158852,
+            55.74889202
+          ]
+        }
+      }
+    ]
+  },
+  "GET /api/runs/{id}/result.geojson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              37.62352976,
+              55.74897789
+            ],
+            [
+              37.62346732,
+              55.74894125
+            ],
+            [
+              37.62347554,
+              55.7487077
+            ]
+          ]
+        },
+        "properties": {
+          "id": "v1-seg-1",
+          "object_type": "heat_network",
+          "variant_id": "1",
+          "start_node_id": "k3",
+          "end_node_id": "oks-4-cp",
+          "flow_tph": 160.0,
+          "diameter": 250,
+          "length": 31.657,
+          "laying_method": "base",
+          "depth_start": null,
+          "depth_end": null,
+          "cost": 4283920.21
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              37.6202647,
+              55.75120357
+            ],
+            [
+              37.6212482,
+              55.7512146
+            ],
+            [
+              37.62125247,
+              55.75109334
+            ]
+          ]
+        },
+        "properties": {
+          "id": "v1-seg-2",
+          "object_type": "heat_network",
+          "variant_id": "1",
+          "start_node_id": "v1-ch-1",
+          "end_node_id": "oks-2-cp",
+          "flow_tph": 30.0,
+          "diameter": 125,
+          "length": 101.059,
+          "laying_method": "base",
+          "depth_start": null,
+          "depth_end": null,
+          "cost": 9830514.23
+        }
+      }
+    ]
+  },
+  "GET /api/datasets/{id}/features/{fid}": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "id": "src",
+        "properties": {
+          "id": "src",
+          "object_type": "source"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            37.61397407,
+            55.74887048
+          ]
+        }
+      }
+    ]
+  },
+  "GET /api/datasets/{id}/issue-features": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "id": "metro-1",
+        "properties": {
+          "id": "metro-1",
+          "object_type": "restriction",
+          "restriction_type": "metro"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                37.62752709,
+                55.74857329
+              ],
+              [
+                37.62832339,
+                55.74858219
+              ],
+              [
+                37.62829187,
+                55.74948046
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "GET /api/compare/features": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "side": "common",
+          "kind": "network"
+        },
+        "geometry": {
+          "type": "MultiLineString",
+          "coordinates": [
+            [
+              [
+                37.6234751,
+                55.7487204
+              ],
+              [
+                37.6234755,
+                55.7487077
+              ]
+            ],
+            [
+              [
+                37.6202647,
+                55.7512036
+              ],
+              [
+                37.6212482,
+                55.7512146
+              ],
+              [
+                37.6212525,
+                55.7510933
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "side": "only_a",
+          "kind": "network"
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              37.6235298,
+              55.7489779
+            ],
+            [
+              37.6234673,
+              55.7489412
+            ],
+            [
+              37.6234751,
+              55.7487204
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "GET /api/status": {
+    "running": 0,
+    "queued": 0,
+    "threads": 2
+  }
+}
