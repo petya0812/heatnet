@@ -12,6 +12,7 @@ import ru.lct.heatnet.input.Obstacle;
 import ru.lct.heatnet.input.ObstacleSource;
 import ru.lct.heatnet.reference.PipeSpec;
 import ru.lct.heatnet.reference.ReferenceData;
+import ru.lct.heatnet.reference.RestrictionRule;
 import ru.lct.heatnet.reference.RuleOptions;
 
 import java.util.ArrayList;
@@ -66,6 +67,24 @@ public final class RouteFinder {
         this.params = params;
         this.model = model;
         this.obstacles = obstacles;
+        for (InputModel.Oks o : model.getOks()) {
+            if (o.ownBuildingId != null) {
+                oksBuildings.add(o.ownBuildingId);
+            }
+        }
+        crossing = RestrictionRule.crossing(RuleOptions.BUILDING_CROSSING, params.rules.buildingCrossingK);
+    }
+
+    /** Buildings of the OKS being connected. */
+    private final java.util.Set<String> oksBuildings = new java.util.HashSet<>();
+    /** Rule of a crossing of a building the route may go through ({@link RuleOptions#throughBuildings}). */
+    private final RestrictionRule crossing;
+
+    /** An existing building other than the own one that the route may go through by the settings. */
+    private boolean crossable(Obstacle o) {
+        RuleOptions.ThroughBuildings t = params.rules.throughBuildings;
+        return t != RuleOptions.ThroughBuildings.NONE && o.getObjectType() == ru.lct.heatnet.input.ObjectType.OKS_EXISTING
+                && (t == RuleOptions.ThroughBuildings.ANY || !oksBuildings.contains(o.getId()));
     }
 
     /** Route of one OKS; when no route is found {@code fail} tells why. */
@@ -254,13 +273,21 @@ public final class RouteFinder {
         }
         Geometry loadArea = Crs.UTM_FACTORY.createPoint(p).buffer(radius + params.obstacleMarginM, 16);
         RoutingContext ctx = new RoutingContext(ref, params, pipe, area, zoneCache, null);
-        // the building of the OKS keeps its clearance like any other (appendix 2.2): only the final straight piece
-        // through the clearance into the building is excused, it is the leg of the start (see starts). Entry from any
-        // point of the outline: the route may come to the outline of its building anywhere, without the clearance
-        String ownBuilding = oks == null || params.rules.entry.alongNormal() ? null : oks.ownBuildingId;
+        // the own building keeps its clearance (appendix 2.2) except on the leg of the start; with the entry from any
+        // point of the outline it keeps none. With throughOwnParts only its main part is an obstacle
+        String ownBuilding = oks == null ? null : oks.ownBuildingId;
         for (Obstacle o : obstacles.intersecting(loadArea)) {
             if (o.getId().equals(ownBuilding)) {
-                ctx.addOwnBuilding(o.getId(), o.getGeometry());
+                Geometry own = params.rules.throughOwnParts ? oks.mainPart() : o.getGeometry();
+                if (!params.rules.entry.alongNormal()) {
+                    ctx.addOwnBuilding(o.getId(), own);
+                } else if (own == o.getGeometry()) {
+                    ctx.addObstacle(o);
+                } else {
+                    ctx.addForbidden(o.getId(), "oks_existing/main", own, ctx.clearanceFor(o));
+                }
+            } else if (crossable(o)) {
+                ctx.addCrossing(o.getId(), crossing, o.getGeometry());
             } else {
                 ctx.addObstacle(o);
             }
@@ -372,10 +399,9 @@ public final class RouteFinder {
 
     /**
      * Where the route may start: the connection point outside its building, or for each allowed wall, nearest first,
-     * the end of the straight piece out of the building along the normal of the wall. Appendix 2.2: the clearance to
-     * the own building does not hold only for the final straight piece, its part in the clearance included, so the
-     * piece crosses the whole clearance and the route turns only beyond it. A wall whose straight piece runs into a
-     * neighbour or a restriction gives no start.
+     * the end of the straight piece out of the building along the normal of the wall. The piece crosses the whole
+     * clearance to the own building (appendix 2.2), the route turns only beyond it. A wall whose straight piece runs
+     * into a neighbour or a restriction gives no start.
      */
     private List<Start> starts(InputModel.Oks oks, List<BuildingEntry.Exit> walls, Coordinate p, Frame frame,
                                RoutingContext ctx, boolean[] intoOwnBuilding) {

@@ -172,6 +172,42 @@ class BuildingEntryTest {
         assertEquals(Unconnected.Reason.ENTRY_BLOCKED, u.reason);
     }
 
+    /**
+     * An existing building 300 m wide stands between the OKS and the network. Through existing buildings: the route
+     * crosses it straight by a special section priced with the coefficient, and the check of the result agrees;
+     * with the default settings crossing it is an error.
+     */
+    @Test
+    void throughAnotherBuilding() throws Exception {
+        String data = withBuilding(dataset(false), "b3", new double[][]{{-150, 60}, {150, 60}, {150, 90}, {-150, 90},
+                {-150, 60}});
+        PlanParams p = new PlanParams();
+        p.rules.throughBuildings = RuleOptions.ThroughBuildings.EXISTING;
+        p.rules.buildingCrossingK = 1.5;
+        Result r = plan(data, p);
+        Variant v = r.variants.get(0);
+        assertTrue(v.unconnected.isEmpty(), v.unconnected.isEmpty() ? "" : v.unconnected.get(0).reason + " "
+                + v.unconnected.get(0).detail);
+        assertEquals(Collections.emptyList(), r.report.errors());
+        assertTrue(v.segments.stream().anyMatch(s -> "special".equals(s.layingMethod) && Math.abs(s.k - 1.5) < 1e-9),
+                "the building is crossed by a special section with K 1.5");
+        assertTrue(check(r.input, r.output, RuleOptions.defaults()).errors().size() > 0,
+                "with the default settings crossing a building is an error");
+    }
+
+    /** The separate part right on the way out closes the nearest wall; with the separate parts open it does not. */
+    @Test
+    void throughOwnSeparateParts() throws Exception {
+        PlanParams p = new PlanParams();
+        p.rules.throughOwnParts = true;
+        Result r = plan(dataset(false, new double[][]{{-1, -8}, {1, -8}, {1, -6}, {-1, -6}, {-1, -8}}), p);
+        Variant v = r.variants.get(0);
+        assertTrue(v.unconnected.isEmpty(), v.unconnected.toString());
+        assertEquals(Collections.emptyList(), r.report.errors());
+        List<Coordinate> c = routeOf(v);
+        assertEquals(3.0, c.get(c.size() - 2).distance(c.get(c.size() - 1)), 0.05, "from the nearest wall");
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static final class Result {
@@ -277,6 +313,12 @@ class BuildingEntryTest {
         }
         fs.add(feature("cp", "oks_connection_point", point(0, 3), ", \"flow_tph\": 5.0"));
         return "{\"type\": \"FeatureCollection\", \"features\": [" + String.join(", ", fs) + "]}";
+    }
+
+    /** The dataset with one more existing building (a restriction of type oks). */
+    private static String withBuilding(String geojson, String id, double[][] ring) {
+        String f = feature(id, "restriction", polygon(ring), ", \"restriction_type\": \"oks\"");
+        return geojson.replace("\"features\": [", "\"features\": [" + f + ", ");
     }
 
     private static String feature(String id, String type, String geometry, String props) {

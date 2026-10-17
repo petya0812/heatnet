@@ -124,6 +124,28 @@ public final class InputModel {
         public boolean connectionInside() {
             return !routePoint.equalsExact(connectionPoint);
         }
+
+        /**
+         * The part of the building with the connection point: the polygon of the multipolygon that contains it (or is
+         * nearest to it); the whole polygon when it is a single one. The other parts are the separate parts of the
+         * building. Null without a polygon.
+         */
+        public Geometry mainPart() {
+            if (polygon == null || polygon.getNumGeometries() < 2) {
+                return polygon;
+            }
+            Geometry best = null;
+            double bestD = Double.POSITIVE_INFINITY;
+            for (int i = 0; i < polygon.getNumGeometries(); i++) {
+                Geometry g = polygon.getGeometryN(i);
+                double d = g.distance(connectionPoint);
+                if (d < bestD) {
+                    bestD = d;
+                    best = g;
+                }
+            }
+            return best;
+        }
     }
 
     private final Source source;

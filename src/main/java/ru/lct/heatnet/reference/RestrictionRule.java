@@ -31,6 +31,18 @@ public final class RestrictionRule {
         this.objectWidthM = objectWidthM;
     }
 
+    /**
+     * A crossing of an object that table 2 forbids but the engineer allows (a building, {@link
+     * RuleOptions#BUILDING_CROSSING}): a straight special section over the object and {@link #CROSSING_BOUNDS_M}
+     * beyond it on both sides (so the ordinary pieces next to it do not touch the object), any angle, price × k.
+     */
+    public static RestrictionRule crossing(String type, double k) {
+        return new RestrictionRule(type, Kind.SPECIAL, 0, 0, Bounds.AREA_PLUS, CROSSING_BOUNDS_M, k, 0);
+    }
+
+    /** Bounds of the special section of a crossing allowed by the engineer beyond the object, metres. */
+    public static final double CROSSING_BOUNDS_M = 1.0;
+
     static RestrictionRule fromJson(String type, JsonNode n) {
         return new RestrictionRule(type,
                 Kind.valueOf(n.get("rule").asText()),

@@ -67,6 +67,26 @@ public class RunParams {
     @JsonProperty("entry_slack_m")
     public Double entrySlackM;
 
+    @Schema(description = "Прохождение трассы сквозь другие здания: NONE — нельзя (по умолчанию: технические "
+            + "требования этого не предусматривают), EXISTING — через существующие здания, кроме зданий подключаемых ОКС, "
+            + "ANY — через существующие здания и здания других ОКС (СП 124, п. 9.3). Здание пересекается прямым "
+            + "спецучастком (контур здания и по 1 м с каждой стороны) с коэффициентом building_crossing_k, отступ к "
+            + "нему не действует",
+            allowableValues = {"NONE", "EXISTING", "ANY"}, defaultValue = "NONE")
+    @JsonProperty("through_buildings")
+    public String throughBuildings;
+
+    @Schema(description = "При through_buildings, отличном от NONE: коэффициент стоимости трубы внутри здания "
+            + "(1…3; по умолчанию 1 — базовая цена)", minimum = "1", maximum = "3", defaultValue = "1", example = "1")
+    @JsonProperty("building_crossing_k")
+    public Double buildingCrossingK;
+
+    @Schema(description = "Прохождение сквозь отдельные части своего здания (полигоны мультиполигона без точки "
+            + "подключения): false — нельзя, это то же здание с отступом (по умолчанию), true — можно, отступ к ним "
+            + "не действует", defaultValue = "false")
+    @JsonProperty("through_own_parts")
+    public Boolean throughOwnParts;
+
     @Schema(description = "Прямой участок трассы от стены здания по перпендикуляру к ней не короче, м (0…20; по "
             + "умолчанию 0). Он всегда пересекает всю зону отступа к своему зданию (технические требования, п. 2.2) — "
             + "5/7/9 м по ДУ; больше — длиннее", minimum = "0", maximum = "20", defaultValue = "0", example = "10")
@@ -139,6 +159,22 @@ public class RunParams {
             }
             p.rules.entrySlackM = entrySlackM;
         }
+        if (throughBuildings != null) {
+            try {
+                p.rules.throughBuildings = RuleOptions.ThroughBuildings.valueOf(throughBuildings.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("through_buildings must be one of NONE, EXISTING, ANY");
+            }
+        }
+        if (buildingCrossingK != null) {
+            if (buildingCrossingK < 1 || buildingCrossingK > 3) {
+                throw new IllegalArgumentException("building_crossing_k must be within [1, 3]");
+            }
+            p.rules.buildingCrossingK = buildingCrossingK;
+        }
+        if (throughOwnParts != null) {
+            p.rules.throughOwnParts = throughOwnParts;
+        }
         if (entryLegM != null) {
             if (entryLegM < 0 || entryLegM > 20) {
                 throw new IllegalArgumentException("entry_leg_m must be within [0, 20]");
@@ -185,6 +221,9 @@ public class RunParams {
         r.buildingEntry = p.rules.entry.name();
         r.entrySlackM = p.rules.entrySlackM;
         r.entryLegM = p.entryLegM;
+        r.throughBuildings = p.rules.throughBuildings.name();
+        r.buildingCrossingK = p.rules.buildingCrossingK;
+        r.throughOwnParts = p.rules.throughOwnParts;
         return r;
     }
 }

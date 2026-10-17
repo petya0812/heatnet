@@ -79,6 +79,14 @@ public final class TestSupport {
         if (System.getProperty("entry") != null) {
             params.rules.entry = ru.lct.heatnet.reference.RuleOptions.Entry.valueOf(System.getProperty("entry"));
         }
+        if (System.getProperty("throughBuildings") != null) {
+            params.rules.throughBuildings = ru.lct.heatnet.reference.RuleOptions.ThroughBuildings.valueOf(
+                    System.getProperty("throughBuildings"));
+        }
+        if (System.getProperty("buildingK") != null) {
+            params.rules.buildingCrossingK = Double.parseDouble(System.getProperty("buildingK"));
+        }
+        params.rules.throughOwnParts = Boolean.getBoolean("ownParts");
         if (System.getProperty("entrySlack") != null) {
             params.rules.entrySlackM = Double.parseDouble(System.getProperty("entrySlack"));
         }

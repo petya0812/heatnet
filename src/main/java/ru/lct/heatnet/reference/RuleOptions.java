@@ -58,12 +58,48 @@ public final class RuleOptions {
         }
     }
 
+    /**
+     * Existing buildings other than the own one the route may go through (СП 124, 9.3 allows crossing residential and
+     * public buildings; the appendix says nothing, so by default none). Such a building is crossed like a road: a
+     * straight special section priced with {@link #buildingCrossingK}, no clearance to it.
+     */
+    public enum ThroughBuildings {
+        /** None: every building keeps its clearance. */
+        NONE("нельзя"),
+        /** Existing buildings, except the buildings of the OKS being connected. */
+        EXISTING("через существующие здания"),
+        /** Existing buildings and the buildings of the other OKS being connected. */
+        ANY("через существующие здания и здания других ОКС");
+
+        private final String label;
+
+        ThroughBuildings(String label) {
+            this.label = label;
+        }
+
+        /** Name of the option in the UI (Russian). */
+        public String label() {
+            return label;
+        }
+    }
+
+    /** Type of the special section across a building, see {@link ThroughBuildings}. */
+    public static final String BUILDING_CROSSING = "building";
+
     public ExistingFlow existingFlow = ExistingFlow.ZERO;
     /** Share of the capacity of the DN assumed loaded with {@link ExistingFlow#CAPACITY_SHARE}. */
     public double existingFlowShare = 0.5;
     public Entry entry = Entry.NEAREST;
     /** With {@link Entry#NEAR}: how much longer than the shortest one the piece inside the building may be, metres. */
     public double entrySlackM = 5.0;
+    public ThroughBuildings throughBuildings = ThroughBuildings.NONE;
+    /** Cost coefficient K of the pipe across a building ({@link #throughBuildings}); 1 — the base price. */
+    public double buildingCrossingK = 1.0;
+    /**
+     * The route may go through the separate parts of the own building (polygons of its multipolygon without the
+     * connection point), they keep no clearance; by default they are the building like its main part.
+     */
+    public boolean throughOwnParts = false;
 
     public static RuleOptions defaults() {
         return new RuleOptions();
@@ -75,6 +111,9 @@ public final class RuleOptions {
         r.existingFlowShare = existingFlowShare;
         r.entry = entry;
         r.entrySlackM = entrySlackM;
+        r.throughBuildings = throughBuildings;
+        r.buildingCrossingK = buildingCrossingK;
+        r.throughOwnParts = throughOwnParts;
         return r;
     }
 
@@ -82,6 +121,9 @@ public final class RuleOptions {
     public String toString() {
         return "existingFlow=" + existingFlow
                 + (existingFlow == ExistingFlow.CAPACITY_SHARE ? " " + existingFlowShare : "")
-                + " entry=" + entry + (entry == Entry.NEAR ? " " + entrySlackM : "");
+                + " entry=" + entry + (entry == Entry.NEAR ? " " + entrySlackM : "")
+                + " throughBuildings=" + throughBuildings
+                + (throughBuildings != ThroughBuildings.NONE ? " k=" + buildingCrossingK : "")
+                + " throughOwnParts=" + throughOwnParts;
     }
 }

@@ -232,6 +232,16 @@ public class RunService {
             parts.add("ввод в здание: " + p.rules.entry.label()
                     + (p.rules.entry == RuleOptions.Entry.NEAR ? " (до +" + num(p.rules.entrySlackM) + " м)" : ""));
         }
+        if (p.rules.throughBuildings != d.rules.throughBuildings || p.rules.throughBuildings
+                != RuleOptions.ThroughBuildings.NONE && p.rules.buildingCrossingK != d.rules.buildingCrossingK) {
+            parts.add("сквозь здания: " + p.rules.throughBuildings.label()
+                    + (p.rules.throughBuildings != RuleOptions.ThroughBuildings.NONE
+                    && p.rules.buildingCrossingK != 1 ? " (K " + num(p.rules.buildingCrossingK) + ")" : ""));
+        }
+        if (p.rules.throughOwnParts != d.rules.throughOwnParts) {
+            parts.add(p.rules.throughOwnParts ? "сквозь отдельные части своего здания"
+                    : "без прохода через отдельные части своего здания");
+        }
         if (p.entryLegM != d.entryLegM) {
             parts.add("прямой участок от стены не короче " + num(p.entryLegM) + " м");
         }

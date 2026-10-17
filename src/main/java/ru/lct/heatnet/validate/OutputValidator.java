@@ -129,6 +129,8 @@ public final class OutputValidator {
     private final ReferenceData ref;
 
     private final RuleOptions rules;
+    /** Rule of a crossing of a building a route may go through ({@link RuleOptions#throughBuildings}). */
+    private final RestrictionRule buildingCrossing;
 
     public OutputValidator(ReferenceData ref) {
         this(ref, RuleOptions.defaults());
@@ -137,6 +139,7 @@ public final class OutputValidator {
     public OutputValidator(ReferenceData ref, RuleOptions rules) {
         this.ref = ref;
         this.rules = rules;
+        this.buildingCrossing = RestrictionRule.crossing(RuleOptions.BUILDING_CROSSING, rules.buildingCrossingK);
     }
 
     public ValidationReport validate(LoadedInput input, InputStream output) throws IOException {
@@ -842,6 +845,46 @@ public final class OutputValidator {
         }
 
         /** The obstacle is the building of an OKS this segment feeds. */
+        /**
+         * The building of an OKS as the clearance and the crossing are checked against: with the separate parts open
+         * ({@link RuleOptions#throughOwnParts}) only its main part, with the connection point.
+         */
+        Geometry buildingOf(Obstacle o) {
+            if (!rules.throughOwnParts) {
+                return o.getGeometry();
+            }
+            List<Geometry> parts = new ArrayList<>();
+            for (InputModel.Oks k : model.getOks()) {
+                if (o.getId().equals(k.ownBuildingId)) {
+                    parts.add(k.mainPart());
+                }
+            }
+            return parts.isEmpty() ? o.getGeometry() : UnaryUnionOp.union(parts);
+        }
+
+        /** An existing building other than the own one that a route may go through by the settings. */
+        boolean crossable(Obstacle o) {
+            if (rules.throughBuildings == RuleOptions.ThroughBuildings.NONE
+                    || o.getObjectType() != ObjectType.OKS_EXISTING) {
+                return false;
+            }
+            if (rules.throughBuildings == RuleOptions.ThroughBuildings.ANY) {
+                return true;
+            }
+            for (InputModel.Oks k : model.getOks()) {
+                if (o.getId().equals(k.ownBuildingId)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** The segment goes into the building: it ends at the connection point of an OKS in it. */
+        boolean entersBuilding(Seg s, String buildingId) {
+            InputModel.Oks own = oksByCp.containsKey(s.end) ? oksByCp.get(s.end) : oksByCp.get(s.start);
+            return own != null && buildingId.equals(own.ownBuildingId);
+        }
+
         boolean feedsBuilding(Seg s, String obstacleId) {
             for (String cp : feeds.getOrDefault(s, Collections.emptySet())) {
                 InputModel.Oks o = oksByCp.get(cp);
@@ -997,7 +1040,7 @@ public final class OutputValidator {
          * only the final straight piece into it, through the clearance along the normal of its wall, is excused.
          */
         void ownBuildingClearance(Seg s, Obstacle o, boolean own) {
-            Geometry b = o.getGeometry();
+            Geometry b = buildingOf(o);
             if (!own && b instanceof Polygonal && s.route.intersects(b.buffer(-0.05))) {
                 rep.error("R-RESTR", v, s.f.id, "Segment goes through building " + o.getId() + " of the OKS it feeds");
                 return;
@@ -1034,12 +1077,18 @@ public final class OutputValidator {
                 String ownBuilding = ownOks == null ? null : ownOks.ownBuildingId;
                 for (Obstacle o : obstacles.intersecting(around)) {
                     boolean own = o.getId().equals(ownBuilding);
+                    if (!own && crossable(o)) {
+                        // a building the route may go through: crossed like a road, by a special section
+                        specialById.computeIfAbsent(o.getId(), k -> new Special(o.getId(),
+                                RuleOptions.BUILDING_CROSSING, buildingCrossing, o.getGeometry(), 0));
+                        continue;
+                    }
                     if (own || feedsBuilding(s, o.getId())) {
                         // entering its own building is checked below as its own OKS
                         if (rules.entry.alongNormal()) {
                             ownBuildingClearance(s, o, own);
                         } else if (!own && o.getGeometry() instanceof Polygonal
-                                && s.route.intersects(o.getGeometry().buffer(-0.05))) {
+                                && s.route.intersects(buildingOf(o).buffer(-0.05))) {
                             // entry from any point of the outline: no clearance to the building it feeds, only not
                             // through it
                             rep.error("R-RESTR", v, s.f.id, "Segment goes through building " + o.getId()
@@ -1069,7 +1118,8 @@ public final class OutputValidator {
                     // format come as restrictions of type oks and are obstacles (appendix 2.2 and 4, clarification 3)
                     boolean own = other.connectionPointId.equals(s.end) || other.connectionPointId.equals(s.start);
                     // s.route is the segment without the inlet piece: the route itself must stay outside
-                    if (own && !s.route.isEmpty() && s.route.intersects(other.polygon.buffer(-0.05))) {
+                    Geometry building = rules.throughOwnParts ? other.mainPart() : other.polygon;
+                    if (own && !s.route.isEmpty() && s.route.intersects(building.buffer(-0.05))) {
                         rep.error("R-RESTR", v, s.f.id, "Segment enters its own OKS " + other.id);
                     }
                 }
@@ -1091,7 +1141,8 @@ public final class OutputValidator {
                     }
                     double k = 1;
                     for (String t : s.crossedTypes) {
-                        k = Math.max(k, ref.restriction(t).getK());
+                        k = Math.max(k, RuleOptions.BUILDING_CROSSING.equals(t) ? buildingCrossing.getK()
+                                : ref.restriction(t).getK());
                     }
                     if (Math.abs(s.impliedK - k) > 1e-3) {
                         rep.error("R-COST", v, s.f.id, String.format("cost implies K=%.4f, expected %.2f for %s",
@@ -1194,6 +1245,9 @@ public final class OutputValidator {
                 if (s.route.isEmpty()) {
                     continue;
                 }
+                if (RuleOptions.BUILDING_CROSSING.equals(sp.type) && entersBuilding(s, sp.id)) {
+                    continue; // the way into the building of an OKS, checked as its entry
+                }
                 Geometry x = s.route.intersection(sp.raw);
                 if (x.isEmpty()) {
                     continue;
@@ -1261,7 +1315,7 @@ public final class OutputValidator {
                 }
                 Geometry band = UnaryUnionOp.union(bandParts);
                 for (Seg s : segs) {
-                    if (s.special) {
+                    if (s.special || RuleOptions.BUILDING_CROSSING.equals(sp.type) && entersBuilding(s, sp.id)) {
                         continue;
                     }
                     Geometry in = s.route.intersection(band);

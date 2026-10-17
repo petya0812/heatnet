@@ -528,6 +528,9 @@ public final class Planner {
         if (removed.ownBuildingId == null || removed.polygon == null) {
             return true; // a footprint of an earlier input format is no obstacle
         }
+        if (params.rules.throughBuildings == ru.lct.heatnet.reference.RuleOptions.ThroughBuildings.ANY) {
+            return true; // the building of another OKS may be crossed
+        }
         List<String> fed = new ArrayList<>();
         collectOks(e.down, fed);
         for (InputModel.Oks o : d.connected()) {
@@ -535,7 +538,9 @@ public final class Planner {
                 return true; // still feeds a connection point in the same building
             }
         }
-        return l.distance(removed.polygon) >= clearance - MERGE_TOL_M;
+        org.locationtech.jts.geom.Geometry building = params.rules.throughOwnParts ? removed.mainPart()
+                : removed.polygon;
+        return l.distance(building) >= clearance - MERGE_TOL_M;
     }
 
     /** Planner geometry keeps this much below the clearance a merged edge is checked against, metres. */

@@ -335,6 +335,11 @@ public final class RoutingContext {
                 : o.getObjectType().getCode(), o.getGeometry(), clearanceFor(o));
     }
 
+    /** An object the route may cross by a straight special section of the rule (a building by the settings). */
+    public void addCrossing(String objectId, RestrictionRule rule, Geometry raw) {
+        addSpecial(objectId, rule.getType(), rule, raw, rule.getMinDistanceM() + pipe.getHalfWidthM());
+    }
+
     public void addExistingNetwork(InputModel.Segment s) {
         RestrictionRule r = ref.restriction("heat_network");
         double objHalf = ref.pipeAtLeast(s.dn).getHalfWidthM();
