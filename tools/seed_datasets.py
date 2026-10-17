@@ -16,6 +16,10 @@
 
 Порядок в списке ниже — порядок загрузки; в интерфейсе новые наборы сверху, поэтому ЗИЛ
 грузится последним и оказывается первым.
+
+Для конкурсного набора сразу после загрузки запускается один расчёт с параметрами по умолчанию (решение по
+техническим требованиям без изменения настроек) — он и есть в истории расчётов набора. Других расчётов скрипт не
+создаёт.
 """
 import argparse
 import json
@@ -55,6 +59,10 @@ DATASETS = [
 # что заводится без --all: конкурсный набор и три примера
 DEFAULT = ("contest-lct.geojson", "contest-osm.geojson", "small.geojson", "dirty.geojson")
 
+# наборы, для которых после загрузки запускается расчёт с параметрами по умолчанию, и его название
+BASELINE = ("contest-lct.geojson",)
+BASELINE_NAME = "Параметры по умолчанию"
+
 
 def api(base, path, method="GET", data=None, headers=None):
     req = urllib.request.Request(base + path, data=data, method=method, headers=headers or {})
@@ -88,6 +96,19 @@ def wait_ready(base, ds_id, timeout=900):
             return d
         time.sleep(2)
     raise TimeoutError(f"набор {ds_id} импортируется дольше {timeout} с")
+
+
+def run_default(base, ds_id, timeout=1800):
+    """Расчёт набора с параметрами по умолчанию; ждёт окончания, возвращает ответ GET /api/runs/{id}."""
+    body = json.dumps({"name": BASELINE_NAME}).encode("utf-8")
+    r = api(base, f"/api/datasets/{ds_id}/runs", "POST", body, {"Content-Type": "application/json"})
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        run = api(base, f"/api/runs/{r['id']}")
+        if run["status"] in ("DONE", "FAILED"):
+            return run
+        time.sleep(3)
+    raise TimeoutError(f"расчёт {r['id']} идёт дольше {timeout} с")
 
 
 def main():
@@ -132,6 +153,12 @@ def main():
             print(f"{d['status']:7} {title} — объектов {d.get('feature_count')}, "
                   f"импорт {d.get('import_millis')} мс")
             os.remove(named)
+            if d["status"] == "READY" and file_name in BASELINE:
+                run = run_default(args.base, d["id"])
+                best = min(run.get("summary") or [], key=lambda v: v["rank"], default=None)
+                print(f"  расчёт «{BASELINE_NAME}»: {run['status']}"
+                      + (f", лучший вариант S {best['score']:.4f}, без трассы {best['unconnected_oks_ids']}"
+                         if best else ""))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

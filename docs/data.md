@@ -11,7 +11,7 @@
 ## Как завести наборы в работающем сервисе
 
 ```bash
-python3 tools/seed_datasets.py            # ЗИЛ и три примера (добавить недостающие)
+python3 tools/seed_datasets.py            # ЗИЛ (с расчётом по умолчанию) и три примера (добавить недостающие)
 python3 tools/seed_datasets.py --all      # все наборы
 python3 tools/seed_datasets.py --reset    # удалить все наборы в сервисе и завести заново (с --all — все)
 ```
