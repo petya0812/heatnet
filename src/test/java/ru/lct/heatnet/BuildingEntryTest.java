@@ -150,6 +150,28 @@ class BuildingEntryTest {
         assertEquals(Collections.emptyList(), fromOutline.report.errors());
     }
 
+    /**
+     * The building has one more small part 2 × 2 m off the south wall, 3 m aside from the way out (a multipolygon,
+     * as many outlines of the input are). Appendix 2.2: the clearance to the own building does not hold on the
+     * straight piece out of it, so the piece passes the part; it may not cross it.
+     */
+    @Test
+    void straightPiecePassesAPartOfTheOwnBuilding() throws Exception {
+        Result r = plan(dataset(false, new double[][]{{3, -5}, {5, -5}, {5, -3}, {3, -3}, {3, -5}}), new PlanParams());
+        Variant v = r.variants.get(0);
+        assertTrue(v.unconnected.isEmpty(), v.unconnected.toString());
+        assertEquals(Collections.emptyList(), r.report.errors());
+        List<Coordinate> c = routeOf(v);
+        assertEquals(3.0, c.get(c.size() - 2).distance(c.get(c.size() - 1)), 0.05, "from the nearest wall");
+        assertEquals(0, v.metrics.entriesNotNearest);
+
+        // the part right on the way out: the straight piece would cross the building itself
+        Result blocked = plan(dataset(false, new double[][]{{-1, -8}, {1, -8}, {1, -6}, {-1, -6}, {-1, -8}}),
+                new PlanParams());
+        Unconnected u = blocked.variants.get(0).unconnected.get(0);
+        assertEquals(Unconnected.Reason.ENTRY_BLOCKED, u.reason);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static final class Result {
@@ -238,11 +260,17 @@ class BuildingEntryTest {
 
     /** The building, the connection point, the network 60 m north of the building; optionally a neighbour south. */
     private static String dataset(boolean neighbour) {
+        return dataset(neighbour, null);
+    }
+
+    /** The dataset; {@code part} — one more polygon of the building of the OKS (a multipolygon then), or null. */
+    private static String dataset(boolean neighbour, double[][] part) {
         List<String> fs = new ArrayList<>();
         fs.add(feature("src", "source", point(-100, 100), ""));
         fs.add(feature("s1", "heat_network", line(new double[][]{{-100, 100}, {100, 100}}),
                 ", \"diameter\": 300, \"upstream_object_id\": \"src\""));
-        fs.add(feature("b1", "restriction", polygon(BUILDING), ", \"restriction_type\": \"oks\""));
+        fs.add(feature("b1", "restriction", part == null ? polygon(BUILDING) : multiPolygon(BUILDING, part),
+                ", \"restriction_type\": \"oks\""));
         if (neighbour) {
             fs.add(feature("b2", "restriction", polygon(new double[][]{{-80, -12}, {80, -12}, {80, -1}, {-80, -1},
                     {-80, -12}}), ", \"restriction_type\": \"oks\""));
@@ -266,6 +294,14 @@ class BuildingEntryTest {
 
     private static String polygon(double[][] ring) {
         return "{\"type\": \"Polygon\", \"coordinates\": [" + positions(ring) + "]}";
+    }
+
+    private static String multiPolygon(double[][]... rings) {
+        List<String> out = new ArrayList<>();
+        for (double[][] r : rings) {
+            out.add("[" + positions(r) + "]");
+        }
+        return "{\"type\": \"MultiPolygon\", \"coordinates\": [" + String.join(", ", out) + "]}";
     }
 
     private static String positions(double[][] pts) {

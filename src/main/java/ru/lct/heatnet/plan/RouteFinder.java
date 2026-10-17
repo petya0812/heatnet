@@ -378,7 +378,7 @@ public final class RouteFinder {
      * neighbour or a restriction gives no start.
      */
     private List<Start> starts(InputModel.Oks oks, List<BuildingEntry.Exit> walls, Coordinate p, Frame frame,
-                               RoutingContext ctx) {
+                               RoutingContext ctx, boolean[] intoOwnBuilding) {
         List<Start> out = new ArrayList<>();
         if (walls.isEmpty()) {
             out.add(new Start(p, Frame.FREE, null, null, 0));
@@ -396,6 +396,9 @@ public final class RouteFinder {
                 heading = Frame.FREE;
             }
             RoutingContext.Endpoint ex = ctx.endpoint(x.c, ctx.specialsAround(x.c, 0.0));
+            // appendix 2.2: the clearance to the own building does not hold on the straight piece out of it, the
+            // building itself (another part or wing of it) may not be crossed
+            ex.clearanceExcused = oks.ownBuildingId;
             if (min <= 0) {
                 out.add(new Start(new Coordinate(x.c), heading, x, null, PREFERENCE * rank++));
                 continue;
@@ -410,6 +413,9 @@ public final class RouteFinder {
                 RoutingContext.EdgeEval e = ctx.evaluate(x.c, q, ex, null);
                 if (e.valid) {
                     leg = new Start(q, heading, x, e, PREFERENCE * rank++);
+                } else if (e.reason != null && e.reason.startsWith("crosses ")
+                        && e.reason.endsWith(" " + oks.ownBuildingId)) {
+                    intoOwnBuilding[0] = true;
                 }
             }
             if (leg != null) {
@@ -521,13 +527,14 @@ public final class RouteFinder {
         Coordinate p = oks.routePoint.getCoordinate();
         // where the route may leave the building, in the order of preference; the piece inside the building and the
         // leg out of it are paid for by the starting cost
-        List<Start> starts = params.rules.entry.alongNormal() ? starts(oks, walls, p, frame, ctx)
+        boolean[] intoOwnBuilding = {false};
+        List<Start> starts = params.rules.entry.alongNormal() ? starts(oks, walls, p, frame, ctx, intoOwnBuilding)
                 : outlineStarts(oks, p, frame);
         if (starts.isEmpty()) {
             fail.set(Unconnected.Reason.ENTRY_BLOCKED, (walls.size() == 1 ? "с ближайшей стены ("
                     + metres(walls.get(0).insideM) + " м внутри здания)" : "ни с одной из " + walls.size()
-                    + " ближайших стен") + " не выйти: прямой участок через зону отступа к зданию упирается в соседнее"
-                    + " здание или ограничение");
+                    + " ближайших стен") + " не выйти: прямой участок через зону отступа к зданию упирается "
+                    + (intoOwnBuilding[0] ? "в другую часть этого же здания" : "в соседнее здание или ограничение"));
             return null;
         }
         double[] startCost = new double[starts.size()];

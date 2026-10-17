@@ -24,14 +24,14 @@ tools/e2e.sh test-data/contest-lct.geojson   # конкурсный набор: 
 ```
 dataset 925d30b1-… uploaded in 0 s
 import: READY, features 144, imported 144, 516 ms, issues {'network.flow_assumed': 29, 'restriction.building': 85, …}
-run d8a66e58-…: variant 1 rank 1 score 25.5318 cost 658344769 unconnected ['10', '11', '16']; variant 2 rank 2 score 25.6366 …
-validation: errors 0, warnings 0; result    34247 bytes
-OK in 19 s; files: target/e2e/dataset.json, target/e2e/run.json, target/e2e/result.geojson
+run 33b35175-…: variant 1 rank 1 score 20.6516 cost 456084981 unconnected ['10']; variant 2 rank 2 score 22.7150 …
+validation: errors 0, warnings 0; result    27801 bytes
+OK in 11 s; files: target/e2e/dataset.json, target/e2e/run.json, target/e2e/result.geojson
 ```
 
 `OK` значит: независимая проверка результата по обязательным правилам — 0 нарушений; два варианта и
-неподключённые ОКС видны в строке `run`. У ОКС 10, 11 и 16 ввод в здание от ближайшей стены (технические
-требования, п. 2.2) упирается в соседнее здание — причина `ENTRY_BLOCKED` и подсказка — в ответе расчёта (`GET /api/runs/{id}`). Каталог для файлов задаётся `OUT_DIR=…`, адрес
+неподключённые ОКС видны в строке `run`. У ОКС 10 прямой участок от ближайшей стены (технические
+требования, п. 2.2) упирается в крыло того же здания — причина `ENTRY_BLOCKED` и подсказка — в ответе расчёта (`GET /api/runs/{id}`). Каталог для файлов задаётся `OUT_DIR=…`, адрес
 сервиса — вторым аргументом: `tools/e2e.sh test-data/contest-lct.geojson http://localhost:8081`. Замечания в `issues` — не ошибки:
 так сервис сообщает, какие значения он восполнил (например, расход существующей сети, которого нет во входе);
 они видны и в интерфейсе на шаге проверки данных.
@@ -49,8 +49,8 @@ OK in 19 s; files: target/e2e/dataset.json, target/e2e/run.json, target/e2e/resu
 | OpenAPI | http://localhost:8080/v3/api-docs | машиночитаемая спецификация |
 
 Конкурсный набор — `test-data/contest-lct.geojson` (144 объекта, 17 ОКС). Ожидаемый итог: 2 варианта,
-**14 из 17 подключено** (у трёх ввод от ближайшей стены закрыт соседним зданием), лучший вариант — S 25,53,
-658 млн руб. со штрафом за неподключённые. Остальные наборы и что от них ждать —
+**16 из 17 подключено** (у ОКС 10 прямой участок от ближайшей стены упирается в крыло того же здания), лучший
+вариант — S 20,65, 456 млн руб. со штрафом за неподключённый. Остальные наборы и что от них ждать —
 [test-data/README.md](test-data/README.md).
 
 ## Настройки расчёта

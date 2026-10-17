@@ -176,6 +176,11 @@ public final class RoutingContext {
         public final List<String> excusedSpecials = new ArrayList<>();
         /** Route ends (connection point, tie-in) may start inside a corridor; a branching chamber may not. */
         public boolean mayTouchCorridors = true;
+        /**
+         * Object whose clearance does not hold on the whole edge from this end, only its interior is closed: the own
+         * building on the straight piece out of it (appendix 2.2). Null — none.
+         */
+        public String clearanceExcused;
 
         Endpoint(Coordinate c) {
             this.c = c;
@@ -548,6 +553,14 @@ public final class RoutingContext {
         Envelope env = seg.getEnvelopeInternal();
         EdgeEval[] bad = {null};
         forEachZone(env, z -> {
+            if (ea != null && z.objectId.equals(ea.clearanceExcused)
+                    || eb != null && z.objectId.equals(eb.clearanceExcused)) {
+                if (z.corePrepared != null && z.corePrepared.intersects(seg)) {
+                    bad[0] = EdgeEval.invalid("crosses " + z.kind + " " + z.objectId);
+                    return false;
+                }
+                return true;
+            }
             boolean escaped = (ea != null && ea.escapedZones.contains(z)) || (eb != null && eb.escapedZones.contains(z));
             if (escaped) {
                 if (z.corePrepared != null && z.corePrepared.intersects(seg)) {
