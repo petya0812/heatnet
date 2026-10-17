@@ -130,12 +130,13 @@ class OutputValidatorTest {
                     p.put("variant_id", "9");
                     p.put("id", "dup-" + p.get("id").asText());
                     for (String ref : new String[]{"start_node_id", "end_node_id"}) {
-                        if (p.has(ref) && !p.get(ref).asText().endsWith("-cp")) {
+                        // objects of the variant get new ids, the input objects it refers to stay
+                        if (p.has(ref) && p.get(ref).asText().startsWith("v1-") && !p.get(ref).asText().endsWith("-cp")) {
                             p.put(ref, "dup-" + p.get(ref).asText());
                         }
                     }
                     if ("variant_summary".equals(p.get("object_type").asText())) {
-                        p.put("rank", 4);
+                        p.put("rank", 3);
                     }
                     copies.add(c);
                 }

@@ -33,6 +33,11 @@ public final class PlanParams {
     public double attachEndMarginM = 2.0;
     /** Passes of the local search (take an OKS out, connect it again). */
     public int localSearchPasses = 2;
+    /**
+     * Variants in the result, at most (appendix 6 allows up to three distinct ones): the best distinct candidates by
+     * score, the separate connection among them only when it is one of the best.
+     */
+    public int maxVariants = 2;
     /** Threads for building variants in parallel within one calculation. */
     public int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
     /**

@@ -26,10 +26,11 @@ import java.util.Set;
  *     <li>{@code joint} — Steiner-tree heuristic: OKS are added one by one, each either ties in to the existing
  *     network or joins the new network of the variant in a branching chamber, whichever is cheaper in score;
  *     then local search re-connects every OKS while the score decreases;</li>
- *     <li>{@code separate} — every OKS has its own tie-in (baseline);</li>
+ *     <li>{@code separate} — every OKS has its own tie-in;</li>
  *     <li>alternatives — other connection orders, or joint without the main tie-in of the best variant.</li>
  * </ul>
- * Up to three structurally different variants (different tie-ins or grouping of OKS) are returned, ranked by score.
+ * The best {@link PlanParams#maxVariants} structurally different candidates (different tie-ins or grouping of OKS)
+ * are returned, ranked by score; the separate connection is among them only when it is one of the best.
  */
 public final class Planner {
 
@@ -37,6 +38,8 @@ public final class Planner {
     public static final String STRATEGY_JOINT = "joint";
     /** Pieces shorter than this are merged into a neighbour (no slivers between special sections). */
     static final double MIN_PIECE_M = 0.04;
+    /** Distinct candidates below which the alternative without the main tie-in is built. */
+    private static final int CANDIDATES_MIN = 3;
     /** Variant id of an assembly made only to score a candidate. */
     private static final String TRIAL = "x";
     /** An entry into the building counts as from the nearest wall within this much of the shortest piece, metres. */
@@ -157,7 +160,7 @@ public final class Planner {
         Candidate sep;
         Candidate improved;
         try {
-            // independent builds in parallel: the separate baseline and three orders of joint connection
+            // independent builds in parallel: the separate connection and three orders of joint connection
             java.util.concurrent.Future<Candidate> fSep = pool.submit(() -> build(model, finder, recorder, near, false,
                     diag, STRATEGY_SEPARATE, "Раздельное подключение: каждый ОКС своей трассой и своей врезкой",
                     "separate"));
@@ -200,7 +203,9 @@ public final class Planner {
         } finally {
             pool.shutdownNow();
         }
-        if (params.jointConnection && distinct(cands).size() < 3) {
+        // the pool of candidates the variants are chosen from: when the builds give fewer than three distinct ones, the
+        // joint connection without the main tie-in is added (it is often the best or the second best)
+        if (params.jointConnection && distinct(cands).size() < CANDIDATES_MIN) {
             Set<String> banned = mainTieObjects(improved.draft);
             if (!banned.isEmpty()) {
                 stage("альтернативный вариант", n);
@@ -213,7 +218,7 @@ public final class Planner {
                 cands.add(alt);
             }
         }
-        List<Candidate> chosen = select(cands, sep);
+        List<Candidate> chosen = select(cands);
         stage("сборка вариантов", 0);
         List<Variant> variants = new ArrayList<>();
         for (int i = 0; i < chosen.size(); i++) {
@@ -276,14 +281,10 @@ public final class Planner {
         return c.draft.signature() + "|" + String.join(",", un);
     }
 
-    /** Best candidate first; the separate baseline is kept among the variants when it is distinct. */
-    private static List<Candidate> select(List<Candidate> cands, Candidate sep) {
+    /** The best distinct candidates, best first, at most {@link PlanParams#maxVariants}. */
+    private List<Candidate> select(List<Candidate> cands) {
         List<Candidate> d = distinct(cands);
-        List<Candidate> out = new ArrayList<>(d.subList(0, Math.min(3, d.size())));
-        if (!out.contains(sep) && d.contains(sep)) {
-            out.set(out.size() - 1, sep);
-        }
-        return out;
+        return new ArrayList<>(d.subList(0, Math.min(params.maxVariants, d.size())));
     }
 
     private static Set<String> mainTieObjects(Draft d) {

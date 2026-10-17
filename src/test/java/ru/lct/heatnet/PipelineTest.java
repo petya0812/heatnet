@@ -3,6 +3,7 @@ package ru.lct.heatnet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import ru.lct.heatnet.plan.PlanParams;
 import ru.lct.heatnet.plan.Planner;
 import ru.lct.heatnet.plan.Variant;
 import ru.lct.heatnet.validate.OutputValidator;
@@ -28,16 +29,17 @@ class PipelineTest {
         }
     }
 
-    static Variant byStrategy(TestSupport.Run r, String strategy) {
-        for (Variant v : r.variants) {
-            if (strategy.equals(v.metrics.strategy)) {
-                return v;
-            }
-        }
-        throw new AssertionError("no variant " + strategy);
+    /** The separate connection of a dataset: the only variant of a calculation without joint connection. */
+    static Variant separate(String name) throws Exception {
+        PlanParams p = new PlanParams();
+        p.jointConnection = false;
+        TestSupport.Run r = TestSupport.run(name, p, "-separate");
+        assertEquals(1, r.variants.size(), "without joint connection only the separate one");
+        assertEquals(Planner.STRATEGY_SEPARATE, r.variants.get(0).metrics.strategy);
+        return r.variants.get(0);
     }
 
-    /** Mandatory rules hold in every variant; 2–3 distinct variants, ranked by score, separate baseline among them. */
+    /** Mandatory rules hold in every variant; the 2 best distinct variants, ranked by score, none worse than separate. */
     @ParameterizedTest
     @ValueSource(strings = {"small.geojson", "chain.geojson", "star.geojson", "dirty.geojson", "dense.geojson",
             "random-42.geojson", "random-7.geojson", "random-100.geojson", "dense-big.geojson"})
@@ -45,13 +47,12 @@ class PipelineTest {
         TestSupport.Run r = TestSupport.run(name);
         ValidationReport rep = validate(r);
         assertEquals(Collections.emptyList(), rep.errors(), "mandatory rules");
-        assertTrue(r.variants.size() >= 2 && r.variants.size() <= 3, "2–3 variants");
+        assertEquals(2, r.variants.size(), "2 variants");
         for (int i = 0; i < r.variants.size(); i++) {
             assertEquals(i + 1, r.variants.get(i).summary.rank);
         }
         Variant best = r.variants.get(0);
-        Variant sep = byStrategy(r, Planner.STRATEGY_SEPARATE);
-        assertTrue(best.summary.score <= sep.summary.score, "best is not worse than separate");
+        assertTrue(best.summary.score <= separate(name).summary.score, "best is not worse than separate");
         assertTrue(rep.getChecked().getOrDefault("R-VAR", 0) >= 2);
     }
 
@@ -67,7 +68,7 @@ class PipelineTest {
                         || u.reason == ru.lct.heatnet.plan.Unconnected.Reason.NO_ROUTE, u.oksId + " " + u.reason);
             }
         }
-        Variant sep = byStrategy(r, Planner.STRATEGY_SEPARATE);
+        Variant sep = separate("small.geojson");
         Set<Double> ks = new HashSet<>();
         for (Variant.NewSegment s : sep.segments) {
             if ("special".equals(s.layingMethod)) {
@@ -102,7 +103,7 @@ class PipelineTest {
     void chainIsConnectedJointly() throws Exception {
         TestSupport.Run r = TestSupport.run("chain.geojson");
         Variant best = r.variants.get(0);
-        Variant sep = byStrategy(r, Planner.STRATEGY_SEPARATE);
+        Variant sep = separate("chain.geojson");
         assertTrue(best.metrics.strategy.startsWith(Planner.STRATEGY_JOINT), best.metrics.strategy);
         assertTrue(best.summary.score < sep.summary.score);
         assertTrue(best.metrics.junctions > 0 && best.tieIns.size() < sep.tieIns.size());
