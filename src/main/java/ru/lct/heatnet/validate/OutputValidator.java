@@ -53,6 +53,15 @@ public final class OutputValidator {
     static final double POS_TOL = 0.05;
     static final double LEN_TOL = 0.05;
     static final double DIST_TOL = 0.02;
+    /** Entry into the building: the piece inside may be this much longer than the shortest one, metres. */
+    static final double ENTRY_LEN_TOL = 0.1;
+    /** Entry into the building: deviation from the perpendicular to the wall, degrees. */
+    static final double ENTRY_ANGLE_TOL_DEG = 1.0;
+    /**
+     * Length of the straight piece into the building that is excused from the clearance to it, beyond the wall, at
+     * most, metres (the clearance, up to 9 m, and the longer leg out of the building).
+     */
+    static final double ENTRY_RAY_M = 60;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -861,6 +870,13 @@ public final class OutputValidator {
                     Coordinate outline = atEnd ? cs[cs.length - 2] : cs[1];
                     if (o.polygon.getBoundary().distance(Crs.UTM_FACTORY.createPoint(outline)) > 0.6) {
                         rep.error("R-RESTR", v, s.f.id, "Entry into OKS " + o.id + " does not start at its outline");
+                    } else {
+                        entry(s, o, outline);
+                        Coordinate cp = o.connectionPoint.getCoordinate();
+                        double len = outline.distance(cp);
+                        if (len > 1e-6 && o.ownBuildingId != null) {
+                            straightEntry(o, cp, (outline.x - cp.x) / len, (outline.y - cp.y) / len, len);
+                        }
                     }
                     s.route = cs.length > 2
                             ? Crs.UTM_FACTORY.createLineString(atEnd ? java.util.Arrays.copyOf(cs, cs.length - 1)
@@ -870,7 +886,141 @@ public final class OutputValidator {
             }
         }
 
+        /**
+         * Appendix 2.2, clarification 3: the piece into the building goes from the point of the outline nearest to
+         * the connection point, so it is perpendicular to its wall. Another wall is allowed only by the entry mode
+         * (a departure from the appendix) and is then reported as a warning.
+         */
+        void entry(Seg s, InputModel.Oks o, Coordinate exit) {
+            Coordinate cp = o.connectionPoint.getCoordinate();
+            double inside = exit.distance(cp);
+            double off = Double.POSITIVE_INFINITY;
+            double shortest = Double.POSITIVE_INFINITY;
+            Geometry inner = o.polygon.buffer(0.05);
+            Geometry boundary = o.polygon.getBoundary();
+            for (int g = 0; g < boundary.getNumGeometries(); g++) {
+                Coordinate[] cs = boundary.getGeometryN(g).getCoordinates();
+                for (int i = 0; i + 1 < cs.length; i++) {
+                    org.locationtech.jts.geom.LineSegment wall = new org.locationtech.jts.geom.LineSegment(cs[i], cs[i + 1]);
+                    if (wall.getLength() < 1e-6) {
+                        continue;
+                    }
+                    double t = wall.projectionFactor(cp);
+                    Coordinate foot = wall.pointAlong(t);
+                    if (wall.distance(exit) <= POS_TOL) {
+                        off = Math.min(off, foot.distance(exit));
+                    }
+                    if (t >= 0 && t <= 1 && foot.distance(cp) < shortest && inner.covers(
+                            Crs.UTM_FACTORY.createLineString(new Coordinate[]{cp, foot}))) {
+                        shortest = foot.distance(cp);
+                    }
+                }
+            }
+            rep.checked("R-ENTRY", 1);
+            // the position of the exit is rounded in the output: 1° of a long piece, a few centimetres of a short one
+            if (off > Math.max(POS_TOL, inside * Math.tan(Math.toRadians(ENTRY_ANGLE_TOL_DEG)))) {
+                String msg = String.format(java.util.Locale.ROOT,
+                        "Entry into OKS %s is not perpendicular to its wall (%.2f m off the foot of the perpendicular)",
+                        o.id, off);
+                if (!rules.entry.alongNormal()) {
+                    rep.warning("R-ENTRY", v, s.f.id, msg);
+                } else {
+                    rep.error("R-ENTRY", v, s.f.id, msg);
+                }
+                return;
+            }
+            if (Double.isInfinite(shortest) || inside <= shortest + ENTRY_LEN_TOL) {
+                return;
+            }
+            String msg = String.format(java.util.Locale.ROOT,
+                    "Entry into OKS %s not from the nearest wall: %.2f m inside the building, from the nearest one %.2f m",
+                    o.id, inside, shortest);
+            boolean allowed = rules.entry == RuleOptions.Entry.ANY || rules.entry == RuleOptions.Entry.OUTLINE
+                    || rules.entry == RuleOptions.Entry.NEAR
+                    && inside <= shortest + rules.entrySlackM + ENTRY_LEN_TOL;
+            if (allowed) {
+                rep.warning("R-ENTRY", v, s.f.id, msg);
+            } else {
+                rep.error("R-ENTRY", v, s.f.id, msg);
+            }
+        }
+
+        /** The straight pieces into the buildings, by building: the clearance to the building does not hold on them. */
+        final Map<String, List<Geometry>> straightEntries = new HashMap<>();
+
+        /**
+         * The straight piece into the building: from the connection point out along the normal of the wall, through
+         * the piece inside the building ({@code inside} metres) and on beyond the wall.
+         */
+        void straightEntry(InputModel.Oks o, Coordinate cp, double nx, double ny, double inside) {
+            double reach = inside + ENTRY_RAY_M;
+            Geometry ray = Crs.UTM_FACTORY.createLineString(new Coordinate[]{cp,
+                    new Coordinate(cp.x + nx * reach, cp.y + ny * reach)}).buffer(POS_TOL);
+            straightEntries.computeIfAbsent(o.ownBuildingId, k -> new ArrayList<>()).add(ray);
+        }
+
+        /** Connection points right on the outline of their building: the straight piece goes out along its normal. */
+        void straightEntriesOnOutlines() {
+            for (InputModel.Oks o : model.getOks()) {
+                if (o.connectionInside() || o.ownBuildingId == null || o.polygon == null) {
+                    continue;
+                }
+                Coordinate cp = o.connectionPoint.getCoordinate();
+                Geometry boundary = o.polygon.getBoundary();
+                org.locationtech.jts.geom.LineSegment wall = null;
+                for (int g = 0; g < boundary.getNumGeometries(); g++) {
+                    Coordinate[] cs = boundary.getGeometryN(g).getCoordinates();
+                    for (int i = 0; i + 1 < cs.length; i++) {
+                        org.locationtech.jts.geom.LineSegment w = new org.locationtech.jts.geom.LineSegment(cs[i], cs[i + 1]);
+                        if (w.getLength() > 1e-6 && (wall == null || w.distance(cp) < wall.distance(cp))) {
+                            wall = w;
+                        }
+                    }
+                }
+                if (wall == null || wall.distance(cp) > POS_TOL) {
+                    continue;
+                }
+                double ex = (wall.p1.x - wall.p0.x) / wall.getLength();
+                double ey = (wall.p1.y - wall.p0.y) / wall.getLength();
+                double nx = -ey;
+                double ny = ex;
+                if (o.polygon.covers(Crs.UTM_FACTORY.createPoint(new Coordinate(cp.x + nx * 0.2, cp.y + ny * 0.2)))) {
+                    nx = -nx;
+                    ny = -ny;
+                }
+                straightEntry(o, cp, nx, ny, 0);
+            }
+        }
+
+        /**
+         * Appendix 2.2: the building of an OKS keeps its clearance for every segment, the ones that feed it included;
+         * only the final straight piece into it, through the clearance along the normal of its wall, is excused.
+         */
+        void ownBuildingClearance(Seg s, Obstacle o, boolean own) {
+            Geometry b = o.getGeometry();
+            if (!own && b instanceof Polygonal && s.route.intersects(b.buffer(-0.05))) {
+                rep.error("R-RESTR", v, s.f.id, "Segment goes through building " + o.getId() + " of the OKS it feeds");
+                return;
+            }
+            PipeSpec pipe = ref.isKnownDn(s.dn) ? ref.pipe(s.dn) : ref.pipeAtLeast(s.dn);
+            double clearance = ref.buildingDistance(s.dn) + pipe.getHalfWidthM();
+            Geometry rest = s.route;
+            for (Geometry ray : straightEntries.getOrDefault(o.getId(), Collections.<Geometry>emptyList())) {
+                rest = rest.difference(ray);
+            }
+            if (rest.isEmpty()) {
+                return;
+            }
+            double d = rest.distance(b);
+            if (d < clearance - DIST_TOL) {
+                rep.error("R-RESTR", v, s.f.id, String.format(java.util.Locale.ROOT, "%.2f m from building %s of "
+                        + "the OKS it feeds, clearance %.2f m required: only the straight piece into it along the "
+                        + "normal of its wall is excused", d, o.getId(), clearance));
+            }
+        }
+
         void restrictions() {
+            straightEntriesOnOutlines();
             Set<Coordinate> endpoints = routeEndpoints();
             List<Special> specials = new ArrayList<>();
             Map<String, Special> specialById = new HashMap<>();
@@ -883,12 +1033,15 @@ public final class OutputValidator {
                 InputModel.Oks ownOks = oksByCp.containsKey(s.end) ? oksByCp.get(s.end) : oksByCp.get(s.start);
                 String ownBuilding = ownOks == null ? null : ownOks.ownBuildingId;
                 for (Obstacle o : obstacles.intersecting(around)) {
-                    if (o.getId().equals(ownBuilding)) {
-                        continue; // the building of this OKS: checked below as its own OKS
-                    }
-                    if (feedsBuilding(s, o.getId())) {
-                        // the building this segment feeds: no clearance to it, but the route may not go through it
-                        if (o.getGeometry() instanceof Polygonal && s.route.intersects(o.getGeometry().buffer(-0.05))) {
+                    boolean own = o.getId().equals(ownBuilding);
+                    if (own || feedsBuilding(s, o.getId())) {
+                        // entering its own building is checked below as its own OKS
+                        if (rules.entry.alongNormal()) {
+                            ownBuildingClearance(s, o, own);
+                        } else if (!own && o.getGeometry() instanceof Polygonal
+                                && s.route.intersects(o.getGeometry().buffer(-0.05))) {
+                            // entry from any point of the outline: no clearance to the building it feeds, only not
+                            // through it
                             rep.error("R-RESTR", v, s.f.id, "Segment goes through building " + o.getId()
                                     + " of the OKS it feeds");
                         }

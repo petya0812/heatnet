@@ -56,7 +56,15 @@ public final class PlanParams {
     public double frameNeighbourRadiusM = 300;
     /** Search areas whose obstacle zones are kept for reuse (memory against repeated work). */
     public int contextCache = 64;
-    /** Points on the outline of the building where the route may leave it (the search picks one). */
+    /**
+     * Shortest straight piece of the route out of the building along the normal of its wall, metres. The piece
+     * always crosses the whole clearance to the building (appendix 2.2: the clearance to the own building does not
+     * hold only for the final straight piece); a longer value makes it longer still. 0 — just the clearance.
+     */
+    public double entryLegM = 0;
+    /** Walls tried, nearest first, when the nearest one is walled in (entry modes other than the nearest wall). */
+    public int entryWalls = 4;
+    /** Entry from any point of the outline: points on it where the route may leave the building (the search picks). */
     public int entryPoints = 8;
     /** Minimal distance between such points, metres. */
     public double entryPointSpacingM = 8.0;

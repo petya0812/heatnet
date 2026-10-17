@@ -43,6 +43,14 @@ final class Frame {
     }
 
     /**
+     * Directions square to a wall with outward normal (nx, ny): the route leaves the building along the normal and
+     * turns from it by multiples of the step, so it comes to the facade at 90°.
+     */
+    static Frame squareTo(double nx, double ny, int stepDeg) {
+        return new Frame(normalize(Math.atan2(ny, nx), stepDeg), stepDeg);
+    }
+
+    /**
      * Directions of the outlines (polygons and lines) around a point: length-weighted mean of edge directions modulo
      * the step, nearer edges weigh more. Without enough outlines — the direction to {@code fallback}.
      */

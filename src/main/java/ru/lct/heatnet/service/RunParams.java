@@ -52,6 +52,27 @@ public class RunParams {
     @JsonProperty("turn_angles_strict")
     public Boolean turnAnglesStrict;
 
+    @Schema(description = "Ввод в здание, если точка подключения внутри контура: NEAREST — только от ближайшей к "
+            + "точке стены (по техническим требованиям, п. 2.2; если с неё не выйти — ОКС без трассы с причиной "
+            + "ENTRY_BLOCKED), NEAR — если ближайшая закрыта, другая стена с отрезком внутри здания длиннее не больше "
+            + "чем на entry_slack_m, ANY — если ближайшая закрыта, любая стена, OUTLINE — с любой точки контура под "
+            + "любым углом, без отступа к своему зданию и прямого участка от стены. NEAR, ANY и OUTLINE отступают от "
+            + "технических требований: такой ввод — предупреждение R-ENTRY в проверке результата",
+            allowableValues = {"NEAREST", "NEAR", "ANY", "OUTLINE"}, defaultValue = "NEAREST")
+    @JsonProperty("building_entry")
+    public String buildingEntry;
+
+    @Schema(description = "При building_entry=NEAR: насколько отрезок внутри здания может быть длиннее, чем от "
+            + "ближайшей стены, м (0…50)", minimum = "0", maximum = "50", defaultValue = "5", example = "5")
+    @JsonProperty("entry_slack_m")
+    public Double entrySlackM;
+
+    @Schema(description = "Прямой участок трассы от стены здания по перпендикуляру к ней не короче, м (0…20; по "
+            + "умолчанию 0). Он всегда пересекает всю зону отступа к своему зданию (технические требования, п. 2.2) — "
+            + "5/7/9 м по ДУ; больше — длиннее", minimum = "0", maximum = "20", defaultValue = "0", example = "10")
+    @JsonProperty("entry_leg_m")
+    public Double entryLegM;
+
     @Schema(description = "Совместное подключение нескольких ОКС через одну врезку (по умолчанию true); при false — "
             + "каждый ОКС своей трассой и своей врезкой", defaultValue = "true")
     @JsonProperty("joint_connection")
@@ -105,6 +126,25 @@ public class RunParams {
         if (jointConnection != null) {
             p.jointConnection = jointConnection;
         }
+        if (buildingEntry != null) {
+            try {
+                p.rules.entry = RuleOptions.Entry.valueOf(buildingEntry.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("building_entry must be one of NEAREST, NEAR, ANY, OUTLINE");
+            }
+        }
+        if (entrySlackM != null) {
+            if (entrySlackM < 0 || entrySlackM > 50) {
+                throw new IllegalArgumentException("entry_slack_m must be within [0, 50]");
+            }
+            p.rules.entrySlackM = entrySlackM;
+        }
+        if (entryLegM != null) {
+            if (entryLegM < 0 || entryLegM > 20) {
+                throw new IllegalArgumentException("entry_leg_m must be within [0, 20]");
+            }
+            p.entryLegM = entryLegM;
+        }
         return p;
     }
 
@@ -142,6 +182,9 @@ public class RunParams {
         r.turnAngles = turnAnglesName(p.turnStepDeg);
         r.turnAnglesStrict = p.turnStepStrict;
         r.jointConnection = p.jointConnection;
+        r.buildingEntry = p.rules.entry.name();
+        r.entrySlackM = p.rules.entrySlackM;
+        r.entryLegM = p.entryLegM;
         return r;
     }
 }

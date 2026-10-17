@@ -24,7 +24,7 @@ class PipelineTest {
 
     static ValidationReport validate(TestSupport.Run r) throws IOException {
         try (InputStream in = Files.newInputStream(r.output)) {
-            return new OutputValidator(TestSupport.REF).validate(r.input, in);
+            return new OutputValidator(TestSupport.REF, r.rules).validate(r.input, in);
         }
     }
 

@@ -12,6 +12,7 @@ import ru.lct.heatnet.input.Obstacle;
 import ru.lct.heatnet.input.ObstacleSource;
 import ru.lct.heatnet.reference.PipeSpec;
 import ru.lct.heatnet.reference.ReferenceData;
+import ru.lct.heatnet.reference.RuleOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,6 +52,11 @@ public final class RouteFinder {
             return size() > params.contextCache;
         }
     };
+    /** Exits from the building of every OKS (they depend on its outline and connection point only). */
+    private final Map<InputModel.Oks, List<BuildingEntry.Exit>> exitCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** Hints why an OKS has no route from its nearest wall, by OKS and DN; empty when there is none. */
+    private final Map<String, String> entryHints = new java.util.concurrent.ConcurrentHashMap<>();
     private final PlanParams params;
     private final InputModel model;
     private final ObstacleSource obstacles;
@@ -91,7 +97,85 @@ public final class RouteFinder {
 
     private Route find(InputModel.Oks oks, PipeSpec pipe, List<Built> built, NetworkState state, AttachProvider attach,
                        Diagnostics diag, Unconnected.Failure fail, SearchTrace trace) {
+        Route r = find(oks, entryWalls(oks), pipe, built, state, attach, diag, fail, trace);
+        if (r == null && params.rules.entry == RuleOptions.Entry.NEAREST
+                && (fail.reason == Unconnected.Reason.NO_ROUTE || fail.reason == Unconnected.Reason.SEARCH_LIMIT
+                || fail.reason == Unconnected.Reason.ENTRY_BLOCKED)) {
+            String hint = entryHint(oks, pipe, built, state, attach);
+            if (hint != null) {
+                fail.set(Unconnected.Reason.ENTRY_BLOCKED, hint);
+            }
+        }
+        return r;
+    }
+
+    /** Exits from the building of the OKS, nearest first, as many as {@link PlanParams#entryWalls}. */
+    private List<BuildingEntry.Exit> exits(InputModel.Oks oks) {
+        return exitCache.computeIfAbsent(oks, o -> BuildingEntry.exits(o, Math.max(1, params.entryWalls)));
+    }
+
+    /**
+     * Exits the route may leave the building by in the entry mode, nearest first; empty when the connection point is
+     * outside its building. The search takes the first one it can leave by.
+     */
+    private List<BuildingEntry.Exit> entryWalls(InputModel.Oks oks) {
+        if (!params.rules.entry.alongNormal()) {
+            return Collections.emptyList(); // the starts are points of the outline, see outlineStarts
+        }
+        List<BuildingEntry.Exit> all = exits(oks);
+        if (all.isEmpty() || params.rules.entry == RuleOptions.Entry.NEAREST) {
+            return all.isEmpty() ? all : all.subList(0, 1);
+        }
+        if (params.rules.entry == RuleOptions.Entry.ANY) {
+            return all;
+        }
+        List<BuildingEntry.Exit> out = new ArrayList<>();
+        for (BuildingEntry.Exit x : all) {
+            if (x.insideM <= all.get(0).insideM + params.rules.entrySlackM + 1e-9) {
+                out.add(x);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Why an OKS left without a route from its nearest wall would have one in another entry mode: a route from
+     * another wall exists, with so much more pipe inside the building. Null when the walls are not the cause.
+     */
+    private String entryHint(InputModel.Oks oks, PipeSpec pipe, List<Built> built, NetworkState state,
+                             AttachProvider attach) {
+        List<BuildingEntry.Exit> all = exits(oks);
+        if (all.size() < 2) {
+            return null;
+        }
+        String key = oks.id + '|' + pipe.getDn();
+        String hint = entryHints.get(key);
+        if (hint == null) {
+            Route r = find(oks, all.subList(1, all.size()), pipe, built, state, attach, new Diagnostics(),
+                    new Unconnected.Failure(), null);
+            hint = "";
+            if (r != null) {
+                double nearest = all.get(0).insideM;
+                double other = r.coords.get(r.coords.size() - 1).distance(oks.connectionPoint.getCoordinate());
+                RuleOptions.Entry mode = other <= nearest + params.rules.entrySlackM + 1e-9
+                        ? RuleOptions.Entry.NEAR : RuleOptions.Entry.ANY;
+                hint = "с ближайшей стены (" + metres(nearest) + " м внутри здания) выйти нельзя; со стены в "
+                        + metres(other) + " м внутри здания трасса есть — ввод в здание «" + mode.label() + "»";
+            }
+            entryHints.put(key, hint);
+        }
+        return hint.isEmpty() ? null : hint;
+    }
+
+    private static String metres(double m) {
+        return String.valueOf(Math.round(m * 10) / 10.0).replace('.', ',');
+    }
+
+    private Route find(InputModel.Oks oks, List<BuildingEntry.Exit> walls, PipeSpec pipe, List<Built> built,
+                       NetworkState state, AttachProvider attach, Diagnostics diag, Unconnected.Failure fail,
+                       SearchTrace trace) {
         Coordinate p = oks.routePoint.getCoordinate();
+        fail.set(Unconnected.Reason.NO_ROUTE, null);
         double dNear = model.distanceToNetwork(p);
         if (Double.isInfinite(dNear)) {
             fail.set(Unconnected.Reason.NO_NETWORK, null);
@@ -104,7 +188,9 @@ public final class RouteFinder {
             double slack = params.corridorSlack * (1 << attempt);
             // first a route along the directions of the chosen turn angles (tidier trace, fewer states), then — unless
             // the angles are strict — a free search with any angles up to 90°, which the appendix allows (2.1)
-            Frame frame = params.turnStepDeg > 0 ? frameFor(ctx, p) : null;
+            // from inside a building: the directions of the wall the route leaves by (it goes out along the normal)
+            Frame frame = params.turnStepDeg <= 0 ? null : walls.isEmpty() ? frameFor(ctx, p)
+                    : Frame.squareTo(walls.get(0).nx, walls.get(0).ny, params.turnStepDeg);
             Route r = null;
             for (Frame f : frame == null ? java.util.Collections.<Frame>singletonList(null)
                     : params.turnStepStrict ? java.util.Collections.singletonList(frame)
@@ -112,13 +198,16 @@ public final class RouteFinder {
                 if (trace != null) {
                     trace.reset(radius);
                 }
-                r = search(oks, pipe, ctx, state, attach, diag, fail, slack, trace, f);
+                r = search(oks, walls, pipe, ctx, state, attach, diag, fail, slack, trace, f);
                 if (r != null) {
                     break;
                 }
             }
             if (r != null) {
                 return r;
+            }
+            if (fail.reason == Unconnected.Reason.ENTRY_BLOCKED) {
+                return null; // no way out of the building: a larger area does not help
             }
             if (fail.reason != Unconnected.Reason.SEARCH_LIMIT) {
                 fail.set(Unconnected.Reason.NO_ROUTE, String.format("радиус поиска %.0f м, ДУ %d, до сети %.0f м%s",
@@ -165,10 +254,12 @@ public final class RouteFinder {
         }
         Geometry loadArea = Crs.UTM_FACTORY.createPoint(p).buffer(radius + params.obstacleMarginM, 16);
         RoutingContext ctx = new RoutingContext(ref, params, pipe, area, zoneCache, null);
-        String ownBuilding = oks == null ? null : oks.ownBuildingId;
+        // the building of the OKS keeps its clearance like any other (appendix 2.2): only the final straight piece
+        // through the clearance into the building is excused, it is the leg of the start (see starts). Entry from any
+        // point of the outline: the route may come to the outline of its building anywhere, without the clearance
+        String ownBuilding = oks == null || params.rules.entry.alongNormal() ? null : oks.ownBuildingId;
         for (Obstacle o : obstacles.intersecting(loadArea)) {
             if (o.getId().equals(ownBuilding)) {
-                // the building this OKS belongs to: the route may come to its outline and enter it
                 ctx.addOwnBuilding(o.getId(), o.getGeometry());
             } else {
                 ctx.addObstacle(o);
@@ -249,16 +340,120 @@ public final class RouteFinder {
         return out;
     }
 
-    /** A route start: a point on the outline of the building (or the connection point) and the way into it. */
+    /**
+     * A route start: the connection point outside its building, or an exit from the building — right at the wall or
+     * at the end of the straight leg out of it.
+     */
     static final class Start {
         final Coordinate c;
-        /** Heading of the piece from the connection point to this exit, {@link Frame#FREE} if there is none. */
+        /** Heading of the way out of the building along the directions, {@link Frame#FREE} if it is off them. */
         final int heading;
+        /** The exit this start leaves the building by; null when the connection point is outside it. */
+        final BuildingEntry.Exit exit;
+        /** The straight leg from the exit to {@link #c}; null when the route starts right at the exit. */
+        final RoutingContext.EdgeEval leg;
+        /** Order of preference of the starts, in score units: a start is used only when the preferred ones fail. */
+        final double preference;
 
-        Start(Coordinate c, int heading) {
+        Start(Coordinate c, int heading, BuildingEntry.Exit exit, RoutingContext.EdgeEval leg, double preference) {
             this.c = c;
             this.heading = heading;
+            this.exit = exit;
+            this.leg = leg;
+            this.preference = preference;
         }
+    }
+
+    /**
+     * Score that orders the starts: far above any route, so the search leaves by a less preferred start (a farther
+     * wall, no leg) only when it finds no route from the preferred one. It is taken off the route score again.
+     */
+    private static final double PREFERENCE = 1e4;
+
+    /**
+     * Where the route may start: the connection point outside its building, or for each allowed wall, nearest first,
+     * the end of the straight piece out of the building along the normal of the wall. Appendix 2.2: the clearance to
+     * the own building does not hold only for the final straight piece, its part in the clearance included, so the
+     * piece crosses the whole clearance and the route turns only beyond it. A wall whose straight piece runs into a
+     * neighbour or a restriction gives no start.
+     */
+    private List<Start> starts(InputModel.Oks oks, List<BuildingEntry.Exit> walls, Coordinate p, Frame frame,
+                               RoutingContext ctx) {
+        List<Start> out = new ArrayList<>();
+        if (walls.isEmpty()) {
+            out.add(new Start(p, Frame.FREE, null, null, 0));
+            return out;
+        }
+        PipeSpec pipe = ctx.getPipe();
+        // a footprint of an earlier input format has no clearance: the route may turn right at its wall
+        double zone = oks.ownBuildingId == null ? 0 : ref.buildingDistance(pipe.getDn()) + pipe.getHalfWidthM()
+                + params.extraClearanceM + params.simplifyToleranceM + params.vertexOffsetM;
+        double min = Math.max(params.entryLegM, zone);
+        int rank = 0;
+        for (BuildingEntry.Exit x : walls) {
+            int heading = frame == null ? Frame.FREE : frame.heading(x.nx, x.ny);
+            if (heading < 0) {
+                heading = Frame.FREE;
+            }
+            RoutingContext.Endpoint ex = ctx.endpoint(x.c, ctx.specialsAround(x.c, 0.0));
+            if (min <= 0) {
+                out.add(new Start(new Coordinate(x.c), heading, x, null, PREFERENCE * rank++));
+                continue;
+            }
+            Start leg = null;
+            for (double len = min; leg == null && len <= min + MAX_LEG_EXTRA_M + 1e-9; len += LEG_STEP_M) {
+                Coordinate q = x.out(len);
+                // the route goes on from the end of the leg as from any turning point: outside every clearance
+                if (!ctx.endpoint(q, null).escapedZones.isEmpty() || !ctx.specialsAround(q, 0.0).isEmpty()) {
+                    continue;
+                }
+                RoutingContext.EdgeEval e = ctx.evaluate(x.c, q, ex, null);
+                if (e.valid) {
+                    leg = new Start(q, heading, x, e, PREFERENCE * rank++);
+                }
+            }
+            if (leg != null) {
+                out.add(leg);
+            } else if (zone == 0) {
+                out.add(new Start(new Coordinate(x.c), heading, x, null, PREFERENCE * rank++));
+            }
+        }
+        return out;
+    }
+
+    /** The straight piece out of the building is made longer by this step when its end is still in a clearance. */
+    private static final double LEG_STEP_M = 0.5;
+    /** At most this much longer than the clearance of the building, metres. */
+    private static final double MAX_LEG_EXTRA_M = 10;
+
+    /**
+     * Score of the turn from the way out of the building to the first leg of a start off the directions:
+     * nothing straight on, the turn penalty for a turn up to 90°, -1 for a sharper one.
+     */
+    private double startTurn(Start s, Coordinate a, Coordinate b) {
+        if (s.exit == null || s.heading != Frame.FREE) {
+            return 0; // along the directions the turns are checked by the heading of the start
+        }
+        double vx = b.x - a.x;
+        double vy = b.y - a.y;
+        double l = Math.hypot(vx, vy);
+        if (l < 1e-9) {
+            return 0;
+        }
+        double defl = Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, (vx * s.exit.nx + vy * s.exit.ny) / l))));
+        if (!ref.isAllowedTurn(defl)) {
+            return -1;
+        }
+        return defl < MIN_TURN_DEG ? 0 : params.turnPenaltyScore;
+    }
+
+    /** A step from a start with the turn from the way out of the building; null if that turn is not allowed. */
+    private Step fromStart(Step e, Start s, Coordinate a, Coordinate firstEnd) {
+        if (e == null) {
+            return null;
+        }
+        double turn = startTurn(s, a, firstEnd);
+        return turn < 0 ? null : turn == 0 ? e : new Step(e.points, e.evals, e.score + turn, e.heading);
     }
 
     /** One step of the search from a turning point to the next point: one straight leg or two. */
@@ -320,19 +515,30 @@ public final class RouteFinder {
         return Frame.around(p, outlines, nearest, params.turnStepDeg);
     }
 
-    private Route search(InputModel.Oks oks, PipeSpec pipe, RoutingContext ctx, NetworkState state,
-                         AttachProvider attach, Diagnostics diag, Unconnected.Failure fail, double slack,
-                         SearchTrace trace, Frame frame) {
+    private Route search(InputModel.Oks oks, List<BuildingEntry.Exit> walls, PipeSpec pipe, RoutingContext ctx,
+                         NetworkState state, AttachProvider attach, Diagnostics diag, Unconnected.Failure fail,
+                         double slack, SearchTrace trace, Frame frame) {
         Coordinate p = oks.routePoint.getCoordinate();
-        // where the route may leave the building: the search picks the exit itself, the piece inside the building
-        // from the exit to the connection point is paid for by the starting cost
-        List<Start> starts = entryPoints(oks, p, frame);
+        // where the route may leave the building, in the order of preference; the piece inside the building and the
+        // leg out of it are paid for by the starting cost
+        List<Start> starts = params.rules.entry.alongNormal() ? starts(oks, walls, p, frame, ctx)
+                : outlineStarts(oks, p, frame);
+        if (starts.isEmpty()) {
+            fail.set(Unconnected.Reason.ENTRY_BLOCKED, (walls.size() == 1 ? "с ближайшей стены ("
+                    + metres(walls.get(0).insideM) + " м внутри здания)" : "ни с одной из " + walls.size()
+                    + " ближайших стен") + " не выйти: прямой участок через зону отступа к зданию упирается в соседнее"
+                    + " здание или ограничение");
+            return null;
+        }
         double[] startCost = new double[starts.size()];
         List<Coordinate> verts = new ArrayList<>();
         for (int i = 0; i < starts.size(); i++) {
-            double inside = starts.get(i).c.distance(oks.connectionPoint.getCoordinate());
-            startCost[i] = ref.scoreOfCost(pipe.getNewCostPerM() * inside) + ref.scoreOfLength(inside);
-            verts.add(starts.get(i).c);
+            Start s = starts.get(i);
+            double inside = s.exit != null ? s.exit.insideM
+                    : params.rules.entry.alongNormal() ? 0 : s.c.distance(oks.connectionPoint.getCoordinate());
+            startCost[i] = s.preference + ref.scoreOfCost(pipe.getNewCostPerM() * inside) + ref.scoreOfLength(inside)
+                    + (s.leg == null ? 0 : s.leg.score);
+            verts.add(s.c);
         }
         int nStarts = starts.size();
         List<Coordinate> corners = ctx.buildVertices();
@@ -361,9 +567,11 @@ public final class RouteFinder {
         }
         verts.addAll(corners);
         int n = verts.size();
+        // the clearance may be broken only around the route end, the exit from the building: not at the end of a leg
         RoutingContext.Endpoint[] startEps = new RoutingContext.Endpoint[nStarts];
         for (int i = 0; i < nStarts; i++) {
-            startEps[i] = ctx.endpoint(verts.get(i), ctx.specialsAround(verts.get(i), 0.0));
+            startEps[i] = starts.get(i).leg != null ? null
+                    : ctx.endpoint(verts.get(i), ctx.specialsAround(verts.get(i), 0.0));
         }
         double goalRadius = ctx.getArea().getEnvelopeInternal().getWidth() / 2 - 1;
         if (trace != null) {
@@ -436,14 +644,17 @@ public final class RouteFinder {
             if (itTie != null) {
                 if (!pending) {
                     Route r = buildRoute(oks, pipe, verts, hs, parent, inStep, itTie, from, (Step) payload,
-                            pq.g[it], ctx, startEps, frame);
+                            pq.g[it], ctx, startEps, starts, frame);
                     if (r == null) {
                         // the route has a turn sharper than 90° that straightening could not remove: this goal
                         // is not usable, the search goes on
                         continue;
                     }
                     if (reached != null) {
-                        r.alternatives.addAll(alternatives(reached, pq, itTie));
+                        for (Route.Alternative a : alternatives(reached, pq, itTie)) {
+                            // without the preference of the start it was reached from (scores stay far below it)
+                            r.alternatives.add(new Route.Alternative(a.tie, a.score % PREFERENCE, a.estimate));
+                        }
                     }
                     if (trace != null) {
                         trace.expansions.add(new int[]{-1, from / hs});
@@ -459,6 +670,9 @@ public final class RouteFinder {
                 Step e = cachedStep(wayCache, "g" + fv + ":" + pd.variant + ":" + itTie.key(), ctx, frame,
                         verts.get(fv), fv < nStarts ? startEps[fv] : null, heading(frame, from, hs), fv < nStarts,
                         pd.mid, itTie.point, et, trace);
+                if (fv < nStarts && parent[from] < 0) {
+                    e = fromStart(e, starts.get(fv), verts.get(fv), pd.mid == null ? itTie.point : pd.mid);
+                }
                 if (e != null) {
                     double total = g[from] + e.score + itTie.terminalScore;
                     if (reached != null) {
@@ -484,6 +698,9 @@ public final class RouteFinder {
                 Step e = cachedStep(wayCache, (((long) fv * n + u / hs) << 1 | pd.variant), ctx, frame, verts.get(fv),
                         fv < nStarts ? startEps[fv] : null, heading(frame, from, hs), fv < nStarts, pd.mid,
                         verts.get(u / hs), null, trace);
+                if (fv < nStarts && parent[from] < 0) {
+                    e = fromStart(e, starts.get(fv), verts.get(fv), pd.mid == null ? verts.get(u / hs) : pd.mid);
+                }
                 if (e == null) {
                     continue;
                 }
@@ -520,6 +737,8 @@ public final class RouteFinder {
             Coordinate cu = verts.get(uv);
             int hin = heading(frame, u, hs);
             boolean atStart = uv < nStarts;
+            // the first leg of a route turns from the way out of the building
+            Start start = atStart && from < 0 ? starts.get(uv) : null;
             List<TieOption> goals = goalsOf.get(uv);
             if (goals == null) {
                 goals = new ArrayList<>(tieOptions(cu, pipe, oks.flowTph, state, chainMemo, frame));
@@ -539,6 +758,13 @@ public final class RouteFinder {
                     if (turn < 0 || shortLeg(cu, mid, tie.point)) {
                         continue;
                     }
+                    if (start != null) {
+                        double out = startTurn(start, cu, mid == null ? tie.point : mid);
+                        if (out < 0) {
+                            continue;
+                        }
+                        turn += out;
+                    }
                     double lower = g[u] + turn + wayLength(cu, mid, tie.point) * minPerM + tie.terminalScore;
                     if (lower < bestGoal) {
                         pq.push(lower, -1, u, tie, new Pending(mid, m), lower);
@@ -557,6 +783,13 @@ public final class RouteFinder {
                     double turn = turnScore(frame, hin, firstHeading(frame, cu, mid, cw), atStart);
                     if (turn < 0 || shortLeg(cu, mid, cw)) {
                         continue;
+                    }
+                    if (start != null) {
+                        double out = startTurn(start, cu, mid == null ? cw : mid);
+                        if (out < 0) {
+                            continue;
+                        }
+                        turn += out;
                     }
                     int ws = w * hs + (frame == null ? 0 : lastHeading(frame, cu, mid, cw));
                     double lower = g[u] + turn + (mid == null ? 0 : params.turnPenaltyScore)
@@ -742,16 +975,17 @@ public final class RouteFinder {
     }
 
     /**
-     * Points where the route may leave the building of the OKS: the connection point itself when it is outside,
-     * otherwise points of the outline from which a straight piece inside the building reaches the connection point.
-     * Which one is used is decided by the search: the nearest exit is often walled in by neighbours. With directions,
-     * the exits lie on the rays from the connection point along the directions, so the bend where the route
-     * leaves the building is a standard one too.
+     * Points where the route may leave the building of the OKS with the entry from any point of the outline
+     * ({@link RuleOptions.Entry#OUTLINE}): the connection point itself when it is outside, otherwise points of the
+     * outline from which a straight piece inside the building reaches the connection point. Which one is used is
+     * decided by the search: the nearest exit is often walled in by neighbours. With directions, the exits lie on the
+     * rays from the connection point along the directions, so the bend where the route leaves the building is a
+     * standard one too.
      */
-    List<Start> entryPoints(InputModel.Oks oks, Coordinate routePoint, Frame frame) {
+    List<Start> outlineStarts(InputModel.Oks oks, Coordinate routePoint, Frame frame) {
         List<Start> out = new ArrayList<>();
         if (!oks.connectionInside() || oks.polygon == null) {
-            out.add(new Start(routePoint, Frame.FREE));
+            out.add(new Start(routePoint, Frame.FREE, null, null, 0));
             return out;
         }
         Coordinate cp = oks.connectionPoint.getCoordinate();
@@ -771,14 +1005,14 @@ public final class RouteFinder {
                     }
                 }
                 if (exit != null && inner.covers(Crs.UTM_FACTORY.createLineString(new Coordinate[]{exit, cp}))) {
-                    out.add(new Start(exit, k));
+                    out.add(new Start(exit, k, null, null, 0));
                 }
             }
             if (!out.isEmpty()) {
                 return out;
             }
         }
-        out.add(new Start(routePoint, Frame.FREE));
+        out.add(new Start(routePoint, Frame.FREE, null, null, 0));
         List<Coordinate> outline = new ArrayList<>(Arrays.asList(oks.polygon.getBoundary().getCoordinates()));
         outline.sort(java.util.Comparator.comparingDouble(c -> c.distance(cp)));
         for (Coordinate c : outline) {
@@ -794,7 +1028,7 @@ public final class RouteFinder {
             }
             // the piece inside the building must stay inside it
             if (inner.covers(Crs.UTM_FACTORY.createLineString(new Coordinate[]{c, cp}))) {
-                out.add(new Start(c, Frame.FREE));
+                out.add(new Start(c, Frame.FREE, null, null, 0));
             }
         }
         return out;
@@ -953,7 +1187,8 @@ public final class RouteFinder {
 
     private Route buildRoute(InputModel.Oks oks, PipeSpec pipe, List<Coordinate> verts, int hs, int[] parent,
                              Step[] inStep, TieOption goalTie, int goalFrom, Step goalStep, double total,
-                             RoutingContext ctx, RoutingContext.Endpoint[] startEps, Frame frame) {
+                             RoutingContext ctx, RoutingContext.Endpoint[] startEps, List<Start> starts,
+                             Frame frame) {
         // steps from the goal back to the start, then the route in the search direction: start ... goal
         List<Step> steps = new ArrayList<>();
         steps.add(goalStep);
@@ -1005,6 +1240,24 @@ public final class RouteFinder {
             }
             i++;
         }
+        Start start = starts.get(startVertex);
+        if (start.leg != null) {
+            // the leg out of the building ends the route at the wall; a route that goes on straight from the leg
+            // has no turning point at its end
+            Coordinate exit = new Coordinate(start.exit.c);
+            fwd.add(exit);
+            edges.add(flip(start.leg));
+            int q = fwd.size() - 2;
+            if (q >= 1 && Planner.deflectionDeg(fwd.get(q - 1), fwd.get(q), exit) < Frame.ALIGN_DEG) {
+                RoutingContext.EdgeEval direct = ctx.evaluate(fwd.get(q - 1), exit, q - 1 == 0 ? goalEp : null,
+                        ctx.endpoint(exit, ctx.specialsAround(exit, 0.0)));
+                if (direct.valid) {
+                    fwd.remove(q);
+                    edges.remove(q);
+                    edges.set(q - 1, direct);
+                }
+            }
+        }
         // a turn sharper than 90° is not allowed (appendix 2.1): if straightening could not remove it, the route
         // is rejected and the search looks for another one
         for (int i = 1; i + 1 < fwd.size(); i++) {
@@ -1012,7 +1265,7 @@ public final class RouteFinder {
                 return null;
             }
         }
-        return new Route(oks, pipe, goalTie, fwd, edges, total);
+        return new Route(oks, pipe, goalTie, fwd, edges, total - start.preference);
     }
 
     private static RoutingContext.EdgeEval flip(RoutingContext.EdgeEval e) {

@@ -22,7 +22,7 @@ const GROUPS = [
 ];
 
 /** Keys with a slider next to the number: the range is the range of the catalogue. */
-const SLIDERS = new Set(['turn_penalty', 'extra_clearance_m', 'min_crossing_angle_deg', 'existing_flow_share']);
+const SLIDERS = new Set(['turn_penalty', 'extra_clearance_m', 'min_crossing_angle_deg', 'existing_flow_share', 'entry_slack_m', 'entry_leg_m']);
 
 export function create(root) {
   let values = null;

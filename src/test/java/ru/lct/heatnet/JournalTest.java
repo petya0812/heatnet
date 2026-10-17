@@ -105,9 +105,15 @@ class JournalTest {
         InputModel m = in.getModel();
         PlanParams params = new PlanParams();
         RouteFinder finder = new RouteFinder(TestSupport.REF, params, m, in.obstacleSource());
+        int routes = 0;
         for (InputModel.Oks oks : m.getOks()) {
             SearchTrace t = finder.trace(oks, new NetworkState(m, TestSupport.REF));
-            assertNotNull(t.route, "route of " + oks.id);
+            if (t.route == null) {
+                // the straight piece out of the building from its nearest wall runs into a neighbour (appendix 2.2)
+                assertEquals(ru.lct.heatnet.plan.Unconnected.Reason.ENTRY_BLOCKED, t.failure, "route of " + oks.id);
+                continue;
+            }
+            routes++;
             assertTrue(t.starts >= 1 && t.vertices.size() >= t.starts);
             assertFalse(t.expansions.isEmpty());
             assertTrue(t.expansions.size() <= params.maxExpansions + 1);
@@ -120,5 +126,6 @@ class JournalTest {
             assertEquals(t.zones.size(), t.zoneKinds.size());
             assertEquals(t.rejected.size(), t.rejectedReasons.size());
         }
+        assertTrue(routes >= m.getOks().size() - 3, "routes found: " + routes);
     }
 }

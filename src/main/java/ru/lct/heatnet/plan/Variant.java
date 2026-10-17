@@ -86,6 +86,14 @@ public final class Variant {
         public int sharpTurns;
         public double turnsPerKm;
         public double minStraightM;
+        /**
+         * Connection points inside their buildings: how many, the pipe inside the buildings and the shortest possible
+         * (from the nearest walls), entries not from the nearest wall.
+         */
+        public int entries;
+        public double insideLengthM;
+        public double insideMinLengthM;
+        public int entriesNotNearest;
     }
 
     /** Additional flow on a piece of an existing segment (whether or not its DN suffices) — for the map. */
@@ -127,6 +135,14 @@ public final class Variant {
         public double ownLength;
         public double ownCost;
         public int turns;
+        /**
+         * The connection point lies inside the building: length of the piece inside it, the shortest possible one
+         * (from the nearest wall) and the straight leg out of the building along the normal of the wall.
+         */
+        public boolean inside;
+        public double insideM;
+        public double insideMinM;
+        public double entryLegM;
         /** Types of special sections crossed by the own branch. */
         public final List<String> specials = new ArrayList<>();
         /** Length of the whole path from the tie-in; new segments along it from the tie-in to the OKS. */

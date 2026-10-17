@@ -212,6 +212,9 @@ final class Draft {
         if (cp == null) {
             return;
         }
+        merged = null;
+        List<Coordinate> own = cp.up.coords;
+        removedExit = own.get(own.size() - (oks.connectionInside() && own.size() > 2 ? 2 : 1));
         Node n = cp;
         while (true) {
             Edge up = n.up;
@@ -237,6 +240,11 @@ final class Draft {
         }
     }
 
+    /** The edge merged by the last {@link #remove}, null if none (not copied). */
+    Edge merged;
+    /** Where the route of the OKS taken out by the last {@link #remove} left its building (its outdoor end). */
+    Coordinate removedExit;
+
     private void dissolve(Node j) {
         Edge a = j.up;
         Edge b = j.down.get(0);
@@ -256,6 +264,7 @@ final class Draft {
         nodes.remove(j.id);
         Edge e = edge(up, down, coords, ivs, Math.max(a.dn, b.dn));
         e.checkedDn = Math.max(a.checkedDn, b.checkedDn);
+        merged = e;
         e.origin = "merge(" + a.origin + "+" + b.origin + ")";
     }
 

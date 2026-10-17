@@ -39,6 +39,8 @@ public final class Planner {
     static final double MIN_PIECE_M = 0.04;
     /** Variant id of an assembly made only to score a candidate. */
     private static final String TRIAL = "x";
+    /** An entry into the building counts as from the nearest wall within this much of the shortest piece, metres. */
+    static final double ENTRY_TOL_M = 0.1;
 
     private final ReferenceData ref;
     private final PlanParams params;
@@ -361,7 +363,7 @@ public final class Planner {
             for (InputModel.Oks oks : all) {
                 Draft trial = cur.draft.copy();
                 trial.remove(oks);
-                if (!trial.recompute(ref) || !tieRuleHolds(model, trial)) {
+                if (!trial.recompute(ref) || !tieRuleHolds(model, trial) || !mergeHolds(finder, trial, oks)) {
                     continue;
                 }
                 Route[] used = new Route[1];
@@ -503,6 +505,40 @@ public final class Planner {
         }
         return true;
     }
+
+    /**
+     * After an OKS is taken out, the edge merged where it left feeds only the others. The route of that OKS kept no
+     * clearance to its own building and might break clearances near its end (route ends are excused): the merged edge
+     * must keep the clearance to that building, now a foreign one, and is checked again near that end.
+     */
+    private boolean mergeHolds(RouteFinder finder, Draft d, InputModel.Oks removed) {
+        Draft.Edge e = d.merged;
+        if (e == null) {
+            return true;
+        }
+        LineString l = line(e.coords);
+        PipeSpec pipe = ref.pipe(e.dn);
+        double clearance = ref.buildingDistance(e.dn) + pipe.getHalfWidthM() + params.extraClearanceM;
+        if (d.removedExit != null && l.isWithinDistance(Crs.UTM_FACTORY.createPoint(d.removedExit),
+                RoutingContext.escapeRadius(clearance))) {
+            return finder.checkPolyline(e.coords, pipe, e.down.kind == Draft.Kind.CP ? e.down.oks : null,
+                    e.up.kind == Draft.Kind.TIE);
+        }
+        if (removed.ownBuildingId == null || removed.polygon == null) {
+            return true; // a footprint of an earlier input format is no obstacle
+        }
+        List<String> fed = new ArrayList<>();
+        collectOks(e.down, fed);
+        for (InputModel.Oks o : d.connected()) {
+            if (fed.contains(o.id) && removed.ownBuildingId.equals(o.ownBuildingId)) {
+                return true; // still feeds a connection point in the same building
+            }
+        }
+        return l.distance(removed.polygon) >= clearance - MERGE_TOL_M;
+    }
+
+    /** Planner geometry keeps this much below the clearance a merged edge is checked against, metres. */
+    private static final double MERGE_TOL_M = 0.02;
 
     /** Re-checks edges whose DN exceeds the DN they were routed for; returns the first failing edge or null. */
     private Draft.Edge recheck(RouteFinder finder, Draft d) {
@@ -855,6 +891,16 @@ public final class Planner {
         }
         if (!TRIAL.equals(variantId)) {
             oksInfo(model, d, v, unconnected, nodeIds, edgeSegments, edgeCosts);
+            for (Variant.OksInfo o : v.oks) {
+                if (o.connected && o.inside) {
+                    v.metrics.entries++;
+                    v.metrics.insideLengthM += o.insideM;
+                    v.metrics.insideMinLengthM += o.insideMinM;
+                    if (o.insideM > o.insideMinM + ENTRY_TOL_M) {
+                        v.metrics.entriesNotNearest++;
+                    }
+                }
+            }
         }
         for (Variant.NewChamber ch : junctionChambers) {
             Draft.Node j = junctionOf.get(ch);
@@ -960,7 +1006,21 @@ public final class Planner {
             oi.dn = own.dn;
             oi.ownLength = round(own.length(), 2);
             oi.ownCost = round(edgeCosts.getOrDefault(own.id, 0.0), 2);
-            oi.turns = Math.max(0, own.coords.size() - 2 - (cp.oks.connectionInside() ? 1 : 0));
+            List<Coordinate> oc = own.coords;
+            int last = oc.size() - 1;
+            // turns of the route outside the building; with the leg out of it the exit is no turn
+            for (int k = 1; k < last - (cp.oks.connectionInside() ? 1 : 0); k++) {
+                if (deflectionDeg(oc.get(k - 1), oc.get(k), oc.get(k + 1)) > 2) {
+                    oi.turns++;
+                }
+            }
+            if (cp.oks.connectionInside()) {
+                oi.inside = true;
+                oi.insideM = round(oc.get(last).distance(oc.get(last - 1)), 2);
+                oi.insideMinM = round(BuildingEntry.exits(cp.oks, 1).get(0).insideM, 2);
+                oi.entryLegM = last >= 2 && deflectionDeg(oc.get(last - 2), oc.get(last - 1), oc.get(last)) < 1
+                        ? round(oc.get(last - 2).distance(oc.get(last - 1)), 2) : 0;
+            }
             for (RoutingContext.Interval iv : own.intervals) {
                 if (iv.type != null && !oi.specials.contains(iv.type)) {
                     oi.specials.add(iv.type);

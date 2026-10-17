@@ -368,6 +368,11 @@ public class OpenApiConfig {
         f("min_straight_m", "Самый короткий прямой отрезок, м");
         f("max_detour_ratio", "Наибольшее отношение длины трассы к прямой");
         f("mean_detour_ratio", "Среднее отношение длины трассы к прямой");
+        f("entries", "Точек подключения внутри своих зданий");
+        f("inside_building_m", "Длина трубы внутри своего здания — от стены до точки подключения (у варианта — сумма), м");
+        f("inside_building_min_m", "Та же длина при вводе от ближайшей стены — наименьшая возможная, м");
+        f("entries_not_nearest", "Вводов не от ближайшей стены (только в режимах ввода NEAR, ANY и OUTLINE)");
+        f("entry_leg_m", "Прямой участок трассы от стены по перпендикуляру к ней (через зону отступа к зданию), м");
         f("special_segments", "Участков в спецпроходе (дорога, трамвай, газопровод, кабель)");
         f("capacity_shortfalls", "Участков существующей сети, которым не хватит пропускной способности; в стоимость не входит");
         f("plan_millis", "Время построения варианта, мс");
@@ -389,7 +394,8 @@ public class OpenApiConfig {
         f("shared_with", "ОКС, питающиеся через то же присоединение");
         f("existing_chain", "Участки существующей сети от врезки до источника");
         f("specials", "Типы ограничений, пересечённых спецпроходом");
-        f("reason", "Код причины: NO_ROUTE, LENGTH_LIMIT, SEARCH_LIMIT, FLOW_EXCEEDS_MAX_DN, NO_CONNECTION_POINT, NO_NETWORK");
+        f("reason", "Код причины: NO_ROUTE, ENTRY_BLOCKED, LENGTH_LIMIT, SEARCH_LIMIT, FLOW_EXCEEDS_MAX_DN, "
+                + "NO_CONNECTION_POINT, NO_NETWORK");
         f("reason_text", "Причина словами");
         f("detail", "Подробности: радиус поиска, ДУ, расстояние до сети");
 

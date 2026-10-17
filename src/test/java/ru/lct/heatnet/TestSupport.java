@@ -23,11 +23,14 @@ public final class TestSupport {
         public final LoadedInput input;
         public final List<Variant> variants;
         public final Path output;
+        /** Rule options of the run: the output is checked with the same ones. */
+        public final ru.lct.heatnet.reference.RuleOptions rules;
 
-        Run(LoadedInput input, List<Variant> variants, Path output) {
+        Run(LoadedInput input, List<Variant> variants, Path output, ru.lct.heatnet.reference.RuleOptions rules) {
             this.input = input;
             this.variants = variants;
             this.output = output;
+            this.rules = rules;
         }
     }
 
@@ -70,6 +73,15 @@ public final class TestSupport {
         if (System.getProperty("minLeg") != null) {
             params.minLegM = Double.parseDouble(System.getProperty("minLeg"));
         }
+        if (System.getProperty("entryLeg") != null) {
+            params.entryLegM = Double.parseDouble(System.getProperty("entryLeg"));
+        }
+        if (System.getProperty("entry") != null) {
+            params.rules.entry = ru.lct.heatnet.reference.RuleOptions.Entry.valueOf(System.getProperty("entry"));
+        }
+        if (System.getProperty("entrySlack") != null) {
+            params.rules.entrySlackM = Double.parseDouble(System.getProperty("entrySlack"));
+        }
         return run(name, params, "");
     }
 
@@ -83,6 +95,6 @@ public final class TestSupport {
         try (OutputStream os = Files.newOutputStream(out)) {
             new ResultWriter().write(os, variants);
         }
-        return new Run(in, variants, out);
+        return new Run(in, variants, out, params.rules);
     }
 }

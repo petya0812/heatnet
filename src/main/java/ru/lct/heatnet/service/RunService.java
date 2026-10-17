@@ -227,6 +227,14 @@ public class RunService {
             parts.add(p.rules.existingFlow == RuleOptions.ExistingFlow.ZERO ? "сеть свободна"
                     : "сеть занята на " + Math.round(p.rules.existingFlowShare * 100) + " %");
         }
+        if (p.rules.entry != d.rules.entry
+                || p.rules.entry == RuleOptions.Entry.NEAR && p.rules.entrySlackM != d.rules.entrySlackM) {
+            parts.add("ввод в здание: " + p.rules.entry.label()
+                    + (p.rules.entry == RuleOptions.Entry.NEAR ? " (до +" + num(p.rules.entrySlackM) + " м)" : ""));
+        }
+        if (p.entryLegM != d.entryLegM) {
+            parts.add("прямой участок от стены не короче " + num(p.entryLegM) + " м");
+        }
         if (parts.isEmpty()) {
             // three runs with default parameters must still be told apart in every list
             return "Расчёт от " + java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Moscow"))
@@ -490,6 +498,10 @@ public class RunService {
             m.put("min_straight_m", v.metrics.minStraightM);
             m.put("mean_detour_ratio", v.metrics.meanDetourRatio);
             m.put("max_detour_ratio", v.metrics.maxDetourRatio);
+            m.put("entries", v.metrics.entries);
+            m.put("inside_building_m", Math.round(v.metrics.insideLengthM * 100) / 100.0);
+            m.put("inside_building_min_m", Math.round(v.metrics.insideMinLengthM * 100) / 100.0);
+            m.put("entries_not_nearest", v.metrics.entriesNotNearest);
             m.put("tie_ins", v.tieIns.size());
             m.put("new_chambers", v.chambers.size());
             m.put("capacity_shortfalls", (int) v.flowChanges.stream()
@@ -517,6 +529,11 @@ public class RunService {
                     x.put("own_length", o.ownLength);
                     x.put("own_cost", o.ownCost);
                     x.put("turns", o.turns);
+                    if (o.inside) {
+                        x.put("inside_building_m", o.insideM);
+                        x.put("inside_building_min_m", o.insideMinM);
+                        x.put("entry_leg_m", o.entryLegM);
+                    }
                     x.put("specials", o.specials);
                     x.put("path_length", o.pathLength);
                     x.put("path_segment_ids", o.pathSegmentIds);
