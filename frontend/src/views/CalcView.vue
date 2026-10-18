@@ -15,6 +15,7 @@ import {toast} from '@/lib/toast';
 import {confirmDialog, promptDialog} from '@/lib/dialogs';
 import {prefs} from '@/lib/prefs';
 import {live, watchRun} from '@/lib/live';
+import {draftFor, draftValues} from '@/lib/calcDraft';
 import PanelLayout from '@/components/shell/PanelLayout.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
@@ -57,12 +58,27 @@ const defaults = () => Object.fromEntries(editable.value.map((e) => [e.key, e.de
 
 // The draft lives while this dataset is open: on another dataset and in a new session — the defaults, so the next
 // person does not calculate with someone else's settings without noticing.
-const values = ref<Record<string, any>>({});
-let valuesFor: string | null = null;
+const values = draftValues;
 watch([() => app.datasetId, () => app.catalog], () => {
-  if (!app.catalog || valuesFor === app.datasetId) return;
-  valuesFor = app.datasetId;
+  if (!app.catalog || draftFor.value === app.datasetId) return;
+  draftFor.value = app.datasetId;
   values.value = defaults();
+}, {immediate: true});
+
+// «Изменить параметры и пересчитать»: the settings of an earlier run come into the form (?from=run)
+watch([() => route.query.from as string | undefined, () => app.catalog], async ([from]) => {
+  if (!from || !app.catalog) return;
+  try {
+    const r: any = await api.run(from);
+    const next = defaults();
+    for (const e of editable.value) if (r.params && r.params[e.key] != null) next[e.key] = r.params[e.key];
+    values.value = next;
+    draftFor.value = app.datasetId;
+    toast(`Параметры взяты из расчёта «${r.name || 'Расчёт'}» — измените нужное и запустите`, {tone: 'ok'});
+  } catch (e: any) {
+    toast(e.message, true);
+  }
+  router.replace({query: {}});
 }, {immediate: true});
 
 const changed = (e: any) => e.editable && String(values.value[e.key]) !== String(e.default);
@@ -158,6 +174,7 @@ async function cancelRun(r: any) {
 const showLive = (r: any) => { if (live.value) live.value.closed = false; watchRun(r.id, app.datasetId!, r.name || 'Расчёт', reload); };
 const menuOf = (r: any) => [
   ...(isActive(r.status) ? [{label: 'Показать построение', icon: Clapperboard, onSelect: () => showLive(r)}, {label: 'Отменить расчёт', icon: X, onSelect: () => cancelRun(r)}] : []),
+  ...(r.status === 'DONE' ? [{label: 'Изменить параметры и пересчитать', icon: SlidersHorizontal, onSelect: () => router.push({query: {from: r.id}})}] : []),
   {label: 'Переименовать', icon: Pencil, onSelect: () => rename(r)},
   {label: r.note ? 'Изменить заметку' : 'Добавить заметку', icon: StickyNote, onSelect: () => note(r)},
   ...(!isActive(r.status) ? [{label: r.pinned ? 'Открепить' : 'Закрепить', icon: r.pinned ? PinOff : Pin, onSelect: () => patch(r, {pinned: !r.pinned})}] : []),
@@ -284,7 +301,7 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
                 </div>
               </div>
               <p v-if="effectOf(e) && !asCards(e)" class="mt-1.5 text-xs leading-snug text-ink-2">{{ effectOf(e) }}</p>
-              <p v-if="e.source" class="mt-1 text-[11px] text-ink-4">{{ e.source }}</p>
+              <p v-if="e.source" class="mt-1 text-[11px] text-ink-3">{{ e.source }}</p>
             </div>
           </template>
         </div>
@@ -308,7 +325,7 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
             <div class="min-w-0 flex-1">
               <div class="text-[13px] font-medium text-ink">{{ e.title }}</div>
               <div class="text-xs text-ink-3">{{ e.value }}</div>
-              <div v-if="e.source" class="text-[11px] text-ink-4">{{ e.source }}</div>
+              <div v-if="e.source" class="text-[11px] text-ink-3">{{ e.source }}</div>
             </div>
           </div>
         </div>

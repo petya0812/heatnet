@@ -36,7 +36,7 @@ const options = computed(() => {
   for (const r of family.value || []) {
     if (r.status !== 'DONE') continue;
     for (let i = 1; i <= (r.variants || 1); i++) {
-      out.push({value: `${r.id}:${i}`, label: `${r.name || 'Расчёт'} · вариант ${i}`, hint: `${r.dataset_version > 1 ? `версия ${r.dataset_version} · ` : ''}${when(r.created_at)}`});
+      out.push({value: `${r.id}:${i}`, label: `Вариант ${i} · ${r.name || 'Расчёт'}`, hint: `${r.dataset_version > 1 ? `версия ${r.dataset_version} · ` : ''}${when(r.created_at)}`});
     }
   }
   return out;
@@ -150,7 +150,7 @@ const [runA, varA] = [computed(() => a.value?.split(':')[0]), computed(() => a.v
         <section class="card p-3.5" aria-labelledby="cmp-m">
           <h2 id="cmp-m" class="mb-2 text-[14px] font-semibold">Показатели</h2>
           <table class="tbl">
-            <thead><tr><th /><th class="r"><span class="text-cmp-a">А</span></th><th class="r"><span class="text-cmp-b">Б</span></th><th class="r">Б − А</th></tr></thead>
+            <thead><tr><th><span class="sr-only">Показатель</span></th><th class="r"><span class="text-cmp-a">А</span></th><th class="r"><span class="text-cmp-b">Б</span></th><th class="r">Б − А</th></tr></thead>
             <tbody>
               <tr v-for="m in result.metrics" :key="m.key" :class="m.title[0] === m.title[0].toLowerCase() ? 'text-ink-3' : ''">
                 <td :class="m.title[0] === m.title[0].toLowerCase() ? 'pl-3 text-xs' : ''">{{ m.title }}{{ m.unit === 'руб.' && m.title[0] !== m.title[0].toLowerCase() ? ', млн ₽' : m.unit === 'м' ? ', м' : '' }}</td>

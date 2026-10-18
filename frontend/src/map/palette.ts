@@ -26,10 +26,10 @@ export interface BasePalette {
 export const BASE: Record<'light' | 'dark', BasePalette> = {
   light: {
     bg: '#eef0f3', building: '#d3d6dc', buildingLine: '#b9bec7', network: '#334155', chamberFill: '#ffffff',
-    casing: '#1d2327', restrictionOpacity: 0.45, osmOpacity: 0.55, halo: '#111827', dn: DN_STOPS,
+    casing: '#1d2327', restrictionOpacity: 0.45, osmOpacity: 0.55, halo: '#2563eb', dn: DN_STOPS,
   },
   dark: {
     bg: '#0f1318', building: '#272d37', buildingLine: '#343c48', network: '#9aa7ba', chamberFill: '#0f1318',
-    casing: '#05070a', restrictionOpacity: 0.3, osmOpacity: 0.35, halo: '#ffffff', dn: DN_STOPS_DARK,
+    casing: '#05070a', restrictionOpacity: 0.3, osmOpacity: 0.35, halo: '#7aa2ff', dn: DN_STOPS_DARK,
   },
 };

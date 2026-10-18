@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import UiTooltip from './UiTooltip.vue';
 
+defineOptions({inheritAttrs: false});
 defineProps<{label: string; value: string; unit?: string; hint?: string; tone?: 'neutral' | 'bad' | 'ok' | 'accent'}>();
 </script>
 
 <template>
   <UiTooltip :content="hint">
-    <div class="inset flex min-w-0 flex-col gap-0.5 px-3 py-2.5" :tabindex="hint ? 0 : undefined">
+    <div class="inset flex min-w-0 flex-col gap-0.5 px-3 py-2.5" :tabindex="hint ? 0 : undefined" v-bind="$attrs">
       <span class="truncate text-xs text-ink-3">{{ label }}</span>
       <span class="num truncate text-[19px] font-semibold leading-tight tracking-tight"
         :class="tone === 'bad' ? 'text-bad' : tone === 'ok' ? 'text-ok' : tone === 'accent' ? 'text-accent-ink' : 'text-ink'">

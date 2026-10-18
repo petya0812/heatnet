@@ -9,7 +9,7 @@ import UiSlider from '@/components/ui/UiSlider.vue';
 import UiSelect from '@/components/ui/UiSelect.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 
-const filterOptions = computed(() => [{value: '', label: 'Весь вариант'}, ...player.oksIds.map((id) => ({value: id, label: 'ОКС ' + id}))]);
+const filterOptions = computed(() => [{value: 'all', label: 'Весь вариант'}, ...player.oksIds.map((id) => ({value: id, label: 'ОКС ' + id}))]);
 const pos = computed({get: () => player.k, set: (v: number) => seek(v)});
 
 const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement).closest('input, textarea, select, [role="slider"], [contenteditable]');
@@ -28,7 +28,7 @@ onKeyStroke('ArrowLeft', (e) => { if (player.open && !typing(e)) stepBack(); });
       </div>
       <UiBadge v-if="player.live" :tone="player.finished ? 'ok' : 'accent'" dot>{{ player.finished ? 'Расчёт завершён' : 'Идёт расчёт' }}</UiBadge>
       <div v-if="player.mode === 'build' && player.oksIds.length" class="w-[150px] max-sm:hidden">
-        <UiSelect :model-value="player.filterOks || ''" :options="filterOptions" label="Что показывать" size="sm" @update:model-value="setFilter($event || null)" />
+        <UiSelect :model-value="player.filterOks || 'all'" :options="filterOptions" label="Что показывать" size="sm" @update:model-value="setFilter($event === 'all' ? null : $event)" />
       </div>
       <UiIconButton :icon="X" label="Закрыть показ" size="sm" @click="close()" />
     </div>

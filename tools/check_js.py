@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Синтаксис интерфейса: каждый модуль должен разбираться как ES-модуль. Ловит то, что не видно глазом после
-правки — незакрытую скобку, оборванный объект атрибутов. Нужен node (только для проверки, в сборку не входит).
+Типы и синтаксис интерфейса (frontend/): vue-tsc проверяет каждый модуль и шаблон. Ловит то, что не видно глазом
+после правки — опечатку в имени, незакрытый тег, обращение к несуществующему полю. Нужны node и установленные
+зависимости (`npm --prefix frontend ci`); в сборку jar это не входит.
 
   python3 tools/check_js.py
 """
@@ -9,23 +10,22 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "src/main/resources/static/js"
+FRONT = Path(__file__).resolve().parent.parent / "frontend"
 
 
 def main():
-    if not subprocess.run(["which", "node"], capture_output=True).returncode == 0:
+    if subprocess.run(["which", "node"], capture_output=True).returncode != 0:
         print("node не найден — проверка пропущена")
         return 0
-    bad = 0
-    for f in sorted(ROOT.rglob("*.js")):
-        r = subprocess.run(["node", "--input-type=module", "--check"],
-                           stdin=f.open("rb"), capture_output=True, text=True)
-        if r.returncode:
-            bad += 1
-            line = next((x for x in r.stderr.splitlines() if "SyntaxError" in x), r.stderr.splitlines()[0] if r.stderr else "")
-            print(f"{f.relative_to(ROOT.parent)}: {line.strip()}")
-    print(f"{bad} problem(s)")
-    return 1 if bad else 0
+    if not (FRONT / "node_modules").exists():
+        print("нет frontend/node_modules — выполните npm --prefix frontend ci")
+        return 1
+    r = subprocess.run(["npx", "vue-tsc", "--noEmit"], cwd=FRONT, capture_output=True, text=True)
+    out = (r.stdout + r.stderr).strip()
+    if out:
+        print(out)
+    print(f"{0 if r.returncode == 0 else len([l for l in out.splitlines() if 'error' in l])} problem(s)")
+    return r.returncode
 
 
 if __name__ == "__main__":

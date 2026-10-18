@@ -26,8 +26,8 @@ export function derive(data: any) {
 }
 
 export const COSTS = [
-  {key: 'segment_cost', title: 'Новые участки', color: '#f97316'},
-  {key: 'chamber_construction_cost', title: 'Новые камеры', color: '#2563eb'},
-  {key: 'existing_chamber_tie_in_cost', title: 'Врезки в камеры', color: '#8b5cf6'},
-  {key: 'unconnected_penalty', title: 'Штраф за неподключённые', color: '#e11d48'},
+  {key: 'segment_cost', title: 'Новые участки', color: 'var(--cost-seg)'},
+  {key: 'chamber_construction_cost', title: 'Новые камеры', color: 'var(--cost-chamber)'},
+  {key: 'existing_chamber_tie_in_cost', title: 'Врезки в камеры', color: 'var(--cost-tie)'},
+  {key: 'unconnected_penalty', title: 'Штраф за неподключённые', color: 'var(--cost-penalty)'},
 ];

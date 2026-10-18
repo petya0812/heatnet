@@ -40,6 +40,8 @@ export function watchRun(run: string, dataset: string, name: string, onEnd?: () 
       } else {
         if (opened && !l.closed) player.appendLive([], true);
         live.value = {...l, done: j.status};
+        // the server names a run when it starts it: the notice uses the final name
+        try { const r: any = await api.run(run); if (r.name) name = r.name; } catch (e) { /* keep the name */ }
         const open = () => router.push({name: 'result', params: {ds: dataset, run, v: '1'}});
         if (j.status === 'DONE') toast(`Расчёт «${name}» готов`, {tone: 'ok', action: {label: 'Открыть', run: open}});
         else toast(j.status === 'CANCELLED' ? 'Расчёт отменён' : 'Расчёт завершился с ошибкой', j.status !== 'CANCELLED');

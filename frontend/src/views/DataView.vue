@@ -169,9 +169,11 @@ const open = (id: string) => router.push({name: 'check', params: {ds: id}});
                 <span v-if="d.type_counts?.heat_network != null"><b class="font-semibold text-ink-2">{{ fmt(d.type_counts.heat_network) }}</b> участков сети</span>
                 <span v-if="d.type_counts?.restriction != null"><b class="font-semibold text-ink-2">{{ fmt(d.type_counts.restriction) }}</b> ограничений</span>
               </div>
-              <div class="mt-1 text-xs text-ink-4">{{ ago(d.created_at) }} · {{ bytes(d.file_bytes) }}<template v-if="d.run_count"> · {{ count(d.run_count, 'расчёт', 'расчёта', 'расчётов') }}</template></div>
+              <div class="mt-1 text-xs text-ink-3">{{ ago(d.created_at) }} · {{ bytes(d.file_bytes) }}<template v-if="d.run_count"> · {{ count(d.run_count, 'расчёт', 'расчёта', 'расчётов') }}</template></div>
             </div>
             <div class="relative z-10 flex items-center gap-1" @click.stop>
+              <UiButton v-if="d.run_count && d.status === 'READY'" size="xs" variant="soft" :icon-right="ArrowRight"
+                @click="router.push({name: 'latest', params: {ds: d.id}})">Результат</UiButton>
               <UiMenu :items="[
                 ...(isActive(d.status) ? [{label: 'Отменить импорт', icon: X, onSelect: () => cancelImport(d)}] : []),
                 {label: 'Удалить набор', icon: Trash2, danger: true, onSelect: () => remove(d)},
@@ -179,7 +181,6 @@ const open = (id: string) => router.push({name: 'check', params: {ds: id}});
                 <UiIconButton :icon="Ellipsis" label="Действия с набором" size="sm" />
               </UiMenu>
             </div>
-            <ArrowRight class="mt-1 size-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true" />
           </div>
           <div v-if="d.error" class="mt-2 flex items-start gap-2 rounded-xl bg-bad-soft px-3 py-2 text-[12.5px] text-bad"><CircleAlert class="mt-px size-4 shrink-0" aria-hidden="true" />{{ d.error }}</div>
           <UiProgress v-if="isActive(d.status)" class="mt-2.5" :value="progress[d.id]?.read" :max="progress[d.id]?.total"
@@ -190,7 +191,7 @@ const open = (id: string) => router.push({name: 'check', params: {ds: id}});
               <GitBranch class="size-3.5 text-ink-4" aria-hidden="true" />
               <span class="font-medium">Версия {{ v.version }}</span>
               <span class="min-w-0 flex-1 truncate text-ink-3">{{ v.note || (v.edits ? count(v.edits.length, 'правка', 'правки', 'правок') : '') }}</span>
-              <span v-if="v.run_count" class="text-ink-4">{{ count(v.run_count, 'расчёт', 'расчёта', 'расчётов') }}</span>
+              <span v-if="v.run_count" class="text-ink-3">{{ count(v.run_count, 'расчёт', 'расчёта', 'расчётов') }}</span>
             </a>
           </div>
         </article>

@@ -39,6 +39,21 @@
   --shadow-pop: 0 2px 6px rgb(16 24 40 / 0.06), 0 22px 54px -14px rgb(16 24 40 / 0.32);
   --shadow-soft: 0 1px 2px rgb(16 24 40 / 0.06);
   --focus: #2563eb;
+  --inverse: #0f172a;
+  --on-inverse: #ffffff;
+  --inverse-ok: #34d399;
+  --inverse-bad: #fb7185;
+  --inverse-accent: #9ab8ff;
+  --brand-1: #ff8a3d;
+  --brand-2: #e8590c;
+  --brand-3: #c2410c;
+  --edit: #e11d48;
+  --trophy: #d97706;
+  --usage-mid: #eab308;
+  --cost-seg: #f97316;
+  --cost-chamber: #2563eb;
+  --cost-tie: #8b5cf6;
+  --cost-penalty: #e11d48;
 }
 
 .dark {
@@ -72,6 +87,11 @@
   --shadow-pop: 0 24px 60px -12px rgb(0 0 0 / 0.7);
   --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.3);
   --focus: #7aa2ff;
+  --inverse: #e9edf3;
+  --on-inverse: #0f172a;
+  --inverse-ok: #047857;
+  --inverse-bad: #d61f45;
+  --inverse-accent: #1d4ed8;
 }
 
 @theme inline {
@@ -101,6 +121,14 @@
   --color-cmp-a: var(--cmp-a);
   --color-cmp-b: var(--cmp-b);
   --color-cmp-common: var(--cmp-common);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
+  --color-inverse-ok: var(--inverse-ok);
+  --color-inverse-bad: var(--inverse-bad);
+  --color-inverse-accent: var(--inverse-accent);
+  --color-edit: var(--edit);
+  --color-trophy: var(--trophy);
+  --color-usage-mid: var(--usage-mid);
   --shadow-panel: var(--shadow-panel);
   --shadow-pop: var(--shadow-pop);
   --shadow-soft: var(--shadow-soft);
@@ -234,7 +262,7 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.map-label.chosen { background: var(--ok); color: #fff; border-color: transparent; }
+.map-label.chosen { background: var(--ok); color: var(--on-accent); border-color: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -185,7 +185,7 @@ const toCalc = () => router.push({name: 'calc', params: {ds: app.datasetId}});
         <span v-if="o.feature_count != null">· {{ count(o.feature_count, 'объект', 'объекта', 'объектов') }}</span>
         <template v-if="o.lineage && o.lineage.length > 1">
           <span>·</span>
-          <span class="inline-flex items-center gap-1"><UiTerm term="версия набора" text="Версии" />:
+          <span class="inline-flex items-center gap-1"><UiTerm term="версия набора" text="Версии:" />
             <template v-for="v in o.lineage" :key="v.id">
               <span v-if="v.id === o.id" class="rounded-full bg-ink px-1.5 text-[11px] font-semibold text-surface-solid">{{ v.version }}</span>
               <RouterLink v-else :to="{name: 'check', params: {ds: v.id}}" :title="v.note || ''" class="rounded-full bg-surface-3 px-1.5 text-[11px] font-semibold text-ink-2 hover:bg-accent-soft hover:text-accent-ink">{{ v.version }}</RouterLink>
@@ -339,7 +339,7 @@ const toCalc = () => router.push({name: 'calc', params: {ds: app.datasetId}});
         <div v-if="o.edits?.length" class="mt-3">
           <div class="eyebrow mb-1">Правки версии {{ o.version }}</div>
           <div v-for="e in o.edits" :key="e.id" class="flex items-center gap-2 border-b border-line py-2 last:border-b-0">
-            <span class="size-2.5 shrink-0 rounded-full bg-[#e11d48]" aria-hidden="true" />
+            <span class="size-2.5 shrink-0 rounded-full bg-edit" aria-hidden="true" />
             <div class="min-w-0 flex-1">
               <div class="text-[13.5px]">{{ typeTitle(e.restriction_type) }}</div>
               <div class="truncate text-xs text-ink-3">{{ fmt(e.area_m2) }} м²{{ e.comment ? ' — ' + e.comment : '' }}</div>
@@ -362,7 +362,7 @@ const toCalc = () => router.push({name: 'calc', params: {ds: app.datasetId}});
 
         <!-- describing a drawn contour -->
         <div v-else-if="form" class="mt-3 space-y-3 rounded-2xl border border-line-strong bg-surface-2 p-3">
-          <div class="flex items-center gap-2 text-[13.5px] font-semibold"><Pentagon class="size-4 text-[#e11d48]" aria-hidden="true" />Новое ограничение</div>
+          <div class="flex items-center gap-2 text-[13.5px] font-semibold"><Pentagon class="size-4 text-edit" aria-hidden="true" />Новое ограничение</div>
           <div>
             <span class="label">Тип</span>
             <UiSelect v-model="draft.type" :options="types.map((t: any) => ({value: t.type, label: t.title}))" label="Тип ограничения" />
@@ -380,7 +380,7 @@ const toCalc = () => router.push({name: 'calc', params: {ds: app.datasetId}});
         <div v-if="pending.length" class="mt-3">
           <div class="eyebrow mb-1">Не сохранено · {{ pending.length }}</div>
           <div v-for="(p, i) in pending" :key="i" class="flex items-center gap-2 border-b border-line py-2 last:border-b-0">
-            <span class="size-2.5 shrink-0 rounded-full border-2 border-dashed border-[#e11d48]" aria-hidden="true" />
+            <span class="size-2.5 shrink-0 rounded-full border-2 border-dashed border-edit" aria-hidden="true" />
             <div class="min-w-0 flex-1">
               <div class="text-[13.5px]">{{ typeTitle(p.restriction_type) }}</div>
               <div v-if="p.comment" class="truncate text-xs text-ink-3">{{ p.comment }}</div>

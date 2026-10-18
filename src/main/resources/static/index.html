@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Трассы подключения к тепловой сети</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23e8590c'/%3E%3Cpath d='M5 17h5V9h9' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>
+  // the theme before the first paint: no white flash in the dark theme
+  try {
+    var m = JSON.parse(localStorage.getItem('heatnet.theme') || '"system"');
+    if (m === 'dark' || (m === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+  } catch (e) {}
+</script>
+  <script type="module" crossorigin src="./assets/index-B-4qJaMH.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/maplibre-wqmL2Hxp.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-DBf1jTa4.css">
+</head>
+<body>
+<div id="app"></div>
+</body>
+</html>

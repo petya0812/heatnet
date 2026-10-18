@@ -2,6 +2,7 @@
 import {computed, type Component} from 'vue';
 import UiTooltip from './UiTooltip.vue';
 
+defineOptions({inheritAttrs: false});
 const props = withDefaults(defineProps<{
   icon: Component;
   label: string;
@@ -30,7 +31,7 @@ const cls = computed(() => [
 <template>
   <UiTooltip :content="label" :side="side">
     <component :is="href ? 'a' : 'button'" :href="href" :target="target" :rel="target ? 'noopener' : undefined"
-      :type="href ? undefined : 'button'" :aria-label="label" :aria-pressed="active === undefined || href ? undefined : active" :disabled="disabled" :class="cls">
+      :type="href ? undefined : 'button'" :aria-label="label" :aria-pressed="active === undefined || href ? undefined : active" :disabled="disabled" v-bind="$attrs" :class="cls">
       <component :is="icon" :class="size === 'xs' ? 'size-3.5' : size === 'lg' ? 'size-5' : 'size-[18px]'" aria-hidden="true" />
     </component>
   </UiTooltip>

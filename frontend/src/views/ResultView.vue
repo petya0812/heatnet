@@ -6,7 +6,7 @@
 import {computed, ref, watch} from 'vue';
 import {RouterLink, useRouter} from 'vue-router';
 import {ArrowRight, Check, CircleAlert, Clapperboard, Download, Ellipsis, GitCompareArrows, Lightbulb, MapPin, Merge, Pencil, Pin, PinOff,
-  Route, Ruler, Search, ShieldAlert, ShieldCheck, StickyNote, TriangleAlert, Trophy, Wrench, X, CircleDot, ListTree, Building2} from 'lucide-vue-next';
+  Route, Ruler, Search, SlidersHorizontal, ShieldAlert, ShieldCheck, StickyNote, TriangleAlert, Trophy, Wrench, X, CircleDot, ListTree, Building2} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
 import {ago, count, fmt, isActive, metres, mln, natural, rub, splitName} from '@/lib/format';
@@ -56,6 +56,7 @@ async function patchRun(p: Record<string, unknown>) {
   } catch (e: any) { toast(e.message, true); }
 }
 const runMenu = computed(() => [
+  {label: 'Изменить параметры и пересчитать', icon: SlidersHorizontal, onSelect: () => router.push({name: 'calc', params: {ds: app.datasetId}, query: {from: app.runId}})},
   {label: 'Переименовать', icon: Pencil, onSelect: async () => { const n = await promptDialog('Название расчёта', {value: run.value.name || ''}); if (n != null) patchRun({name: n}); }},
   {label: run.value?.note ? 'Изменить заметку' : 'Добавить заметку', icon: StickyNote, onSelect: async () => {
     const n = await promptDialog('Заметка к расчёту', {value: run.value.note || '', multiline: true, placeholder: 'Цель расчёта, что проверяем'});
@@ -169,7 +170,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
 
 <template>
   <!-- ============================================================ the card of an OKS -->
-  <PanelLayout v-if="app.oksId && run && run.status === 'DONE'" :title="`ОКС ${app.oksId}`" :eyebrow="`Вариант ${app.variantId} · ${run.name || 'Расчёт'}`"
+  <PanelLayout v-if="app.oksId && run && run.status === 'DONE'" :title="`ОКС ${app.oksId}`" :eyebrow="`Вариант ${app.variantId} · карточка ОКС`"
     :back="{to: {name: 'result', params: {ds: app.datasetId, run: app.runId, v: app.variantId}}, label: `К варианту ${app.variantId}`}">
     <template #title-extra>
       <UiBadge v-if="oks" :tone="oks.connected ? 'ok' : 'bad'" size="md" dot>{{ oks.connected ? 'подключён' : 'не подключён' }}</UiBadge>
@@ -318,7 +319,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
           class="relative rounded-[16px] border p-3 text-left transition-[border-color,box-shadow,background-color]"
           :class="x.variant_id === v.variant_id ? 'border-accent bg-surface-solid shadow-[0_0_0_3px_var(--accent-soft)]' : 'border-line bg-surface-2 hover:border-line-strong hover:bg-surface-solid'">
           <div class="flex items-center gap-1.5 text-[13px] font-semibold" :class="x.variant_id === v.variant_id ? 'text-accent-ink' : 'text-ink-2'">
-            <Trophy v-if="x.rank === 1" class="size-3.5 text-[#d97706]" aria-label="лучший" />Вариант {{ x.variant_id }}
+            <Trophy v-if="x.rank === 1" class="size-3.5 text-trophy" aria-label="лучший" />Вариант {{ x.variant_id }}
             <span class="ml-auto text-xs font-medium text-ink-3">{{ x.rank }} место</span>
           </div>
           <div class="num mt-1 text-[22px] font-semibold leading-none tracking-tight text-ink">S {{ fmt(x.score, 2) }}</div>
@@ -451,7 +452,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
         <div v-for="(f, i) in d.runs.slice().sort((a: any, b: any) => (b.properties.usage || 0) - (a.properties.usage || 0)).slice(0, 8)" :key="i" class="flex items-center gap-3 py-1.5 text-[13px]">
           <span class="w-14 shrink-0 text-ink-2">ДУ {{ f.properties.diameter ?? '—' }}</span>
           <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-3">
-            <div class="h-full rounded-full" :class="f.properties.usage > 1 ? 'bg-bad' : f.properties.usage > 0.8 ? 'bg-[#eab308]' : 'bg-ok'" :style="{width: Math.min(100, 100 * (f.properties.usage || 0)) + '%'}" />
+            <div class="h-full rounded-full" :class="f.properties.usage > 1 ? 'bg-bad' : f.properties.usage > 0.8 ? 'bg-usage-mid' : 'bg-ok'" :style="{width: Math.min(100, 100 * (f.properties.usage || 0)) + '%'}" />
           </div>
           <span class="num w-28 shrink-0 text-right text-xs text-ink-3">{{ fmt(f.properties.measured_length, 0) }} из {{ fmt(f.properties.max_length, 0) }} м</span>
         </div>
@@ -475,7 +476,6 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
       <UiTooltip content="Как подключались ОКС — по шагам на карте">
         <UiButton variant="secondary" :icon="Clapperboard" @click="replay()">Построение</UiButton>
       </UiTooltip>
-      <UiButton variant="secondary" :icon="GitCompareArrows" @click="toCompare">Сравнить</UiButton>
       <span class="flex-1" />
       <UiButton variant="primary" :icon="Download" @click="toExport">Выгрузить</UiButton>
     </template>

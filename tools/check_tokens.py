@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Проверка единого языка оформления: цвет в интерфейсе задаётся только переменными из начала app.css.
+Проверка единого языка оформления: цвет в интерфейсе задаётся только токенами из начала frontend/src/styles.css.
 
 Где цвет разрешён прямым значением:
-  - объявления переменных в app.css (`--что-то: #rrggbb`);
-  - слои карты (`js/map/`, `js/anim/`) — там цвет принадлежит данным: ДУ, типы ограничений, состояния объектов;
+  - объявления токенов в styles.css (`--что-то: #rrggbb`);
+  - слои карты (`src/map/`) — там цвет принадлежит данным: ДУ, типы ограничений, состояния объектов;
   - значок страницы в index.html.
 
   python3 tools/check_tokens.py
@@ -13,9 +13,9 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "src/main/resources/static"
+ROOT = Path(__file__).resolve().parent.parent / "frontend/src"
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
-MAP_COLOURS_OK = ("js/map/", "js/anim/")
+MAP_COLOURS_OK = ("map/",)
 
 
 def check_css(path):
@@ -26,11 +26,11 @@ def check_css(path):
             continue
         if re.match(r"\s*--[\w-]+\s*:", code):
             continue
-        out.append(f"{path.relative_to(ROOT)}:{n}: цвет вне переменной — {code.strip()}")
+        out.append(f"{path.relative_to(ROOT)}:{n}: цвет вне токена — {code.strip()}")
     return out
 
 
-def check_js(path):
+def check_code(path):
     rel = str(path.relative_to(ROOT))
     if rel.startswith(MAP_COLOURS_OK):
         return []
@@ -43,9 +43,9 @@ def check_js(path):
 
 def main():
     problems = []
-    problems += check_css(ROOT / "app.css")
-    for js in sorted(ROOT.glob("js/**/*.js")):
-        problems += check_js(js)
+    problems += check_css(ROOT / "styles.css")
+    for f in sorted(list(ROOT.rglob("*.vue")) + list(ROOT.rglob("*.ts"))):
+        problems += check_code(f)
     for p in problems:
         print(p)
     print(f"{len(problems)} problem(s)")

@@ -24,7 +24,7 @@ function openOks(oks: string) {
       <span class="size-3 shrink-0 rounded-full" :style="{background: picked.color}" aria-hidden="true" />
       <div class="min-w-0 flex-1">
         <div class="eyebrow">{{ picked.kind === 'result' ? 'Результат' : 'Исходные данные' }}</div>
-        <h2 class="truncate text-[15px] font-semibold">{{ picked.title }}</h2>
+        <h2 class="line-clamp-2 text-[15px] font-semibold leading-snug">{{ picked.title }}</h2>
       </div>
       <UiIconButton :icon="X" label="Закрыть" size="sm" @click="clearPicked()" />
     </div>

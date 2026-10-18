@@ -379,9 +379,9 @@ function highlightNow(geojson: Any, {fitTo = true, maxZoom = 17} = {}) {
   if (!map.getLayer('hl-line')) {
     // a halo under the objects of the variant: highlighted things keep their own colours
     const c = palette.halo;
-    addLayerNow({id: 'hl-fill', type: 'fill', source: 'hl', filter: ['==', ['geometry-type'], 'Polygon'], paint: {'fill-color': c, 'fill-opacity': 0.18}});
+    addLayerNow({id: 'hl-fill', type: 'fill', source: 'hl', filter: ['==', ['geometry-type'], 'Polygon'], paint: {'fill-color': c, 'fill-opacity': 0.22}});
     addLayerNow({id: 'hl-line', type: 'line', source: 'hl', layout: {'line-cap': 'round', 'line-join': 'round'},
-      paint: {'line-color': c, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 9, 16, 20, 19, 34], 'line-opacity': 0.25, 'line-blur': 3}},
+      paint: {'line-color': c, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 22, 19, 36], 'line-opacity': 0.4, 'line-blur': 2}},
     map.getLayer('res-short') ? 'res-short' : undefined);
     addLayerNow({id: 'hl-point', type: 'circle', source: 'hl', filter: ['==', ['geometry-type'], 'Point'],
       paint: {'circle-color': 'rgba(0,0,0,0)', 'circle-radius': 16, 'circle-stroke-color': c, 'circle-stroke-width': 3, 'circle-stroke-opacity': 0.8}});

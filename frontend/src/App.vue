@@ -18,6 +18,7 @@ import PlayerBar from '@/components/shell/PlayerBar.vue';
 import HelpDialog from '@/components/shell/HelpDialog.vue';
 import GlobalDialogs from '@/components/shell/GlobalDialogs.vue';
 import Toaster from '@/components/shell/Toaster.vue';
+import WelcomeCard from '@/components/shell/WelcomeCard.vue';
 import {prefs} from '@/lib/prefs';
 
 const app = useApp();
@@ -81,7 +82,7 @@ watchEffect(() => {
       <main id="panel" ref="panelEl" tabindex="-1"
         class="panel absolute z-20 flex flex-col overflow-hidden transition-[width] duration-200 focus:outline-none md:bottom-3 md:left-3 md:top-[72px]"
         :class="[narrow ? 'inset-x-2 bottom-2 rounded-b-[22px]' : wide ? 'w-[520px]' : 'w-[420px]',
-          narrow ? (sheetCollapsed ? 'h-[132px]' : 'top-[64px]') : '']">
+          narrow ? (sheetCollapsed ? 'h-[132px]' : 'h-[62dvh]') : '']">
         <button v-if="narrow" type="button" class="flex h-6 shrink-0 items-center justify-center text-ink-3" :aria-label="sheetCollapsed ? 'Развернуть панель' : 'Свернуть панель'"
           @click="sheetCollapsed = !sheetCollapsed">
           <component :is="sheetCollapsed ? ChevronUp : ChevronDown" class="size-5" aria-hidden="true" />
@@ -108,8 +109,14 @@ watchEffect(() => {
       </div>
 
       <Transition enter-from-class="opacity-0 -translate-y-1" leave-to-class="opacity-0" enter-active-class="transition" leave-active-class="transition">
-        <div v-if="engine.hintText.value" class="pointer-events-none absolute left-1/2 top-[76px] z-30 -translate-x-1/2 rounded-full bg-[#0f172a] px-4 py-2 text-[13px] text-white shadow-pop max-md:top-[64px] max-md:w-[calc(100vw-24px)] max-md:rounded-2xl" role="status">
+        <div v-if="engine.hintText.value" class="pointer-events-none absolute left-1/2 top-[76px] z-30 -translate-x-1/2 rounded-full bg-inverse px-4 py-2 text-[13px] text-on-inverse shadow-pop max-md:top-[64px] max-md:w-[calc(100vw-24px)] max-md:rounded-2xl" role="status">
           {{ engine.hintText.value }}
+        </div>
+      </Transition>
+
+      <Transition enter-from-class="opacity-0 translate-y-2" leave-to-class="opacity-0" enter-active-class="transition duration-300" leave-active-class="transition duration-150">
+        <div v-if="app.view === 'data' && !narrow" class="pointer-events-none absolute inset-y-0 right-[76px] z-10 flex items-center justify-center" :style="{left: panelW + 24 + 'px'}">
+          <WelcomeCard class="pointer-events-auto" @help="helpOpen = true" />
         </div>
       </Transition>
 
