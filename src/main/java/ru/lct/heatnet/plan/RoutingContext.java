@@ -99,6 +99,9 @@ public final class RoutingContext {
         final SegmentClipper rawClip;
         final SegmentClipper corridorClip;
         final SegmentClipper boundsClip;
+        /** {@code isWithinDistance} of the object and of its corridor to a point. */
+        final NearCheck rawNear;
+        final NearCheck corridorNear;
 
         Special(String objectId, String type, RestrictionRule rule, Geometry raw, double corridorM) {
             this.objectId = objectId;
@@ -117,6 +120,8 @@ public final class RoutingContext {
             this.crossedBoundary = areal && rule.getMinAngleDeg() > 0 ? new PolygonBoundary(raw, rawClip) : null;
             this.corridorClip = new SegmentClipper(corridor);
             this.boundsClip = boundsArea != null ? new SegmentClipper(boundsArea) : null;
+            this.rawNear = new NearCheck(raw, rawClip);
+            this.corridorNear = new NearCheck(corridor, corridorClip);
             raw.getEnvelopeInternal();
             corridor.getEnvelopeInternal();
             boundary.getEnvelopeInternal();
@@ -154,18 +159,35 @@ public final class RoutingContext {
         public final double length;
         public final double score;
         public final List<Interval> intervals;
-        public final String reason;
+        private final String reason;
+        /** An edge in the clearance of this zone: the reason is made when asked for (rarely). */
+        private final Zone clearanceOf;
 
         EdgeEval(boolean valid, double length, double score, List<Interval> intervals, String reason) {
+            this(valid, length, score, intervals, reason, null);
+        }
+
+        private EdgeEval(boolean valid, double length, double score, List<Interval> intervals, String reason,
+                         Zone clearanceOf) {
             this.valid = valid;
             this.length = length;
             this.score = score;
             this.intervals = intervals;
             this.reason = reason;
+            this.clearanceOf = clearanceOf;
+        }
+
+        /** Why the edge is not allowed; null for an allowed one. */
+        public String reason() {
+            return clearanceOf != null ? "clearance of " + clearanceOf.kind + " " + clearanceOf.objectId : reason;
         }
 
         static EdgeEval invalid(String reason) {
             return new EdgeEval(false, 0, 0, Collections.emptyList(), reason);
+        }
+
+        static EdgeEval inClearance(Zone z) {
+            return new EdgeEval(false, 0, 0, Collections.emptyList(), null, z);
         }
     }
 
@@ -195,6 +217,9 @@ public final class RoutingContext {
     private final List<Special> specials = new ArrayList<>();
     private final STRtree zoneIndex = new STRtree();
     private final STRtree specialIndex = new STRtree();
+    /** The indexes laid out for the queries, made by {@link #build()}. */
+    private SegmentQuery zoneQuery;
+    private SegmentQuery specialQuery;
 
     private final ZoneCache cache;
     /** Zones of objects that do not change during planning; shared between searches of one calculation. */
@@ -208,17 +233,17 @@ public final class RoutingContext {
     static final class Static {
         final List<Zone> zones;
         final List<Special> specials;
-        final STRtree zoneIndex;
-        final STRtree specialIndex;
+        final SegmentQuery zoneQuery;
+        final SegmentQuery specialQuery;
         /** Corners of the zones, already checked against these zones. */
         final List<Coordinate> vertices;
 
-        Static(List<Zone> zones, List<Special> specials, STRtree zoneIndex, STRtree specialIndex,
+        Static(List<Zone> zones, List<Special> specials, SegmentQuery zoneQuery, SegmentQuery specialQuery,
                List<Coordinate> vertices) {
             this.zones = zones;
             this.specials = specials;
-            this.zoneIndex = zoneIndex;
-            this.specialIndex = specialIndex;
+            this.zoneQuery = zoneQuery;
+            this.specialQuery = specialQuery;
             this.vertices = vertices;
         }
     }
@@ -239,7 +264,7 @@ public final class RoutingContext {
 
     /** The zones added so far as a reusable static part (the context must be built). */
     Static toStatic() {
-        return new Static(zones, specials, zoneIndex, specialIndex, buildVertices());
+        return new Static(zones, specials, zones(), specials(), buildVertices());
     }
 
     public PipeSpec getPipe() {
@@ -356,41 +381,78 @@ public final class RoutingContext {
     public void build() {
         zoneIndex.build();
         specialIndex.build();
+        zoneQuery = new SegmentQuery(zoneIndex);
+        specialQuery = new SegmentQuery(specialIndex);
     }
 
     /** Zones of this search and of the shared static part that may contain the envelope, without merging lists. */
     @SuppressWarnings("unchecked")
     private void forEachZone(Envelope env, java.util.function.Predicate<Zone> action) {
-        for (Object o : (List<Object>) zoneIndex.query(env)) {
-            if (!action.test((Zone) o)) {
-                return;
-            }
-        }
-        if (shared != null) {
-            for (Object o : (List<Object>) shared.zoneIndex.query(env)) {
-                if (!action.test((Zone) o)) {
-                    return;
-                }
-            }
+        if (zones().forEach(env, action) && shared != null) {
+            shared.zoneQuery.forEach(env, action);
         }
     }
 
-    /** Specials as one list (used where the loop cannot be interrupted). */
-    private List<Special> querySpecialsList(Envelope env) {
+    /** The area prepared for point tests: the same answers as the geometry, without a full relate per point. */
+    private PreparedGeometry areaPrepared;
+
+    private PreparedGeometry area() {
+        if (areaPrepared == null) {
+            areaPrepared = PreparedGeometryFactory.prepare(area);
+        }
+        return areaPrepared;
+    }
+
+    /** The zone index laid out for the queries; built here if {@link #build()} was not called. */
+    private SegmentQuery zones() {
+        if (zoneQuery == null) {
+            zoneIndex.build();
+            zoneQuery = new SegmentQuery(zoneIndex);
+        }
+        return zoneQuery;
+    }
+
+    private SegmentQuery specials() {
+        if (specialQuery == null) {
+            specialIndex.build();
+            specialQuery = new SegmentQuery(specialIndex);
+        }
+        return specialQuery;
+    }
+
+    /**
+     * {@link #forEachZone} for the segment a→b: the same zones in the same order, without those whose envelope the
+     * segment itself does not touch (they cannot meet it, only its envelope).
+     */
+    private void forEachZoneAlong(Coordinate a, Coordinate b, Envelope env, java.util.function.Predicate<Zone> action) {
+        if (zones().forEach(a, b, env, action) && shared != null) {
+            shared.zoneQuery.forEach(a, b, env, action);
+        }
+    }
+
+    /** Specials whose corridor envelope the segment a→b touches, in the order of {@link #forEachSpecial}. */
+    private List<Special> specialsAlong(Coordinate a, Coordinate b, Envelope env) {
         List<Special> out = new ArrayList<>();
-        forEachSpecial(env, out::add);
+        java.util.function.Predicate<Special> add = sp -> {
+            out.add(sp);
+            return true;
+        };
+        specials().forEach(a, b, env, add);
+        if (shared != null) {
+            shared.specialQuery.forEach(a, b, env, add);
+        }
         return out;
     }
 
     @SuppressWarnings("unchecked")
     private void forEachSpecial(Envelope env, java.util.function.Consumer<Special> action) {
-        for (Object o : (List<Object>) specialIndex.query(env)) {
-            action.accept((Special) o);
-        }
+        java.util.function.Predicate<Special> all = sp -> {
+            action.accept(sp);
+            return true;
+        };
+        specials().forEach(env, all);
         if (shared != null) {
-            for (Object o : (List<Object>) shared.specialIndex.query(env)) {
-                action.accept((Special) o);
-            }
+            shared.specialQuery.forEach(env, all);
         }
     }
 
@@ -409,12 +471,15 @@ public final class RoutingContext {
     /** Candidate turning points: convex corners of blocking zones, slightly outside them. */
     public List<Coordinate> buildVertices() {
         if (shared != null) {
-            // corners of the shared zones are already checked against them; both sets are checked against the
-            // zones of this search (the routes already built for the variant)
-            List<Coordinate> all = new ArrayList<>(shared.vertices);
-            all.addAll(ownCorners());
+            // corners of the shared zones are already checked against them and the area (the same circle); both sets
+            // are checked against the zones of this search (the routes already built for the variant)
             List<Coordinate> free = new ArrayList<>();
-            for (Coordinate c : all) {
+            for (Coordinate c : shared.vertices) {
+                if (isFreeOfOwn(c)) {
+                    free.add(c);
+                }
+            }
+            for (Coordinate c : ownCorners()) {
                 if (isFreeVertex(c)) {
                     free.add(c);
                 }
@@ -487,9 +552,35 @@ public final class RoutingContext {
         }
     }
 
+    /**
+     * {@link #isFreeVertex} for a corner of the shared part: it is in the area and free of the shared zones and
+     * specials already, so only the zones and specials of this search are checked.
+     */
+    private boolean isFreeOfOwn(Coordinate c) {
+        Point p = Crs.UTM_FACTORY.createPoint(c);
+        boolean[] free = {true};
+        zones().forEach(new Envelope(c), (Zone z) -> {
+            if (z.blockPrepared.intersects(p)) {
+                free[0] = false;
+            }
+            return free[0];
+        });
+        if (free[0] && !specials.isEmpty()) {
+            Envelope env = new Envelope(c);
+            env.expandBy(10);
+            specials().forEach(env, (Special sp) -> {
+                if (sp.rawNear.within(p, sp.corridorM + 0.05)) {
+                    free[0] = false;
+                }
+                return free[0];
+            });
+        }
+        return free[0];
+    }
+
     public boolean isFreeVertex(Coordinate c) {
         Point p = Crs.UTM_FACTORY.createPoint(c);
-        if (!area.contains(p)) {
+        if (!area().contains(p)) {
             return false;
         }
         boolean[] free = {true};
@@ -505,7 +596,7 @@ public final class RoutingContext {
         Envelope env = new Envelope(c);
         env.expandBy(10);
         forEachSpecial(env, sp -> {
-            if (sp.raw.isWithinDistance(p, sp.corridorM + 0.05)) {
+            if (sp.rawNear.within(p, sp.corridorM + 0.05)) {
                 free[0] = false;
             }
         });
@@ -537,7 +628,7 @@ public final class RoutingContext {
         Envelope env = new Envelope(c);
         env.expandBy(extraM + 10);
         forEachSpecial(env, sp -> {
-            if (sp.corridor.isWithinDistance(p, extraM)) {
+            if (sp.corridorNear.within(p, extraM)) {
                 ids.add(sp.objectId);
             }
         });
@@ -554,10 +645,13 @@ public final class RoutingContext {
         if (len < 1e-6) {
             return new EdgeEval(true, 0, 0, Collections.emptyList(), null);
         }
+        if (ea == null && eb == null) {
+            return evaluateInner(a, b, len);
+        }
         LineString seg = Crs.UTM_FACTORY.createLineString(new Coordinate[]{a, b});
         Envelope env = seg.getEnvelopeInternal();
         EdgeEval[] bad = {null};
-        forEachZone(env, z -> {
+        forEachZoneAlong(a, b, env, z -> {
             if (ea != null && z.objectId.equals(ea.clearanceExcused)
                     || eb != null && z.objectId.equals(eb.clearanceExcused)) {
                 if (z.corePrepared != null && z.corePrepared.intersects(seg)) {
@@ -590,12 +684,12 @@ public final class RoutingContext {
                     boolean nearA = escA && in[1] <= r;
                     boolean nearB = escB && in[0] >= 1 - r;
                     if (!nearA && !nearB) {
-                        bad[0] = EdgeEval.invalid("clearance of " + z.kind + " " + z.objectId);
+                        bad[0] = EdgeEval.inClearance(z);
                         return false;
                     }
                 }
             } else if (z.blockClip.intersects(a, b)) {
-                bad[0] = EdgeEval.invalid("clearance of " + z.kind + " " + z.objectId);
+                bad[0] = EdgeEval.inClearance(z);
                 return false;
             }
             return true;
@@ -603,8 +697,64 @@ public final class RoutingContext {
         if (bad[0] != null) {
             return bad[0];
         }
+        return evaluateSpecials(a, b, len, env, ea, eb);
+    }
+
+    /** {@link #evaluate} of an edge between two turning points (no route end): only its clearances are checked. */
+    private EdgeEval evaluateInner(Coordinate a, Coordinate b, double len) {
+        Envelope env = new Envelope(a, b);
+        Zone[] bad = {null};
+        java.util.function.Predicate<Zone> clear = z -> {
+            if (z.blockClip.intersects(a, b)) {
+                bad[0] = z;
+                return false;
+            }
+            return true;
+        };
+        forEachZoneAlong(a, b, env, clear);
+        return bad[0] != null ? EdgeEval.inClearance(bad[0]) : evaluateSpecials(a, b, len, env, null, null);
+    }
+
+    /** Ends of an edge (or a point, both ends the same), exact: a key of maps by coordinates. */
+    static final class EdgeKey {
+        final double ax;
+        final double ay;
+        final double bx;
+        final double by;
+
+        EdgeKey(Coordinate a, Coordinate b) {
+            ax = a.x;
+            ay = a.y;
+            bx = b.x;
+            by = b.y;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof EdgeKey)) {
+                return false;
+            }
+            EdgeKey k = (EdgeKey) o;
+            return Double.doubleToLongBits(ax) == Double.doubleToLongBits(k.ax)
+                    && Double.doubleToLongBits(ay) == Double.doubleToLongBits(k.ay)
+                    && Double.doubleToLongBits(bx) == Double.doubleToLongBits(k.bx)
+                    && Double.doubleToLongBits(by) == Double.doubleToLongBits(k.by);
+        }
+
+        @Override
+        public int hashCode() {
+            long h = Double.doubleToLongBits(ax);
+            h = h * 31 + Double.doubleToLongBits(ay);
+            h = h * 31 + Double.doubleToLongBits(bx);
+            h = h * 31 + Double.doubleToLongBits(by);
+            return (int) (h ^ (h >>> 32));
+        }
+    }
+
+    /** The specials part of {@link #evaluate}: crossings and their special sections, then the cost. */
+    private EdgeEval evaluateSpecials(Coordinate a, Coordinate b, double len, Envelope env, Endpoint ea, Endpoint eb) {
         List<Interval> raw = new ArrayList<>();
-        for (Special sp : querySpecialsList(env)) {
+        for (Special sp : specialsAlong(a, b, env)) {
             List<SegmentClipper.Hit> ch = sp.corridorClip.hits(a, b);
             if (ch.isEmpty() && !sp.corridorClip.contains(a)) {
                 continue;

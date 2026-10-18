@@ -36,8 +36,9 @@ final class SegmentClipper {
 
     private static final int BRUTE_FORCE_EDGES = 48;
 
-    private final STRtree edges = new STRtree();
     private final double[][] edgeArray;
+    /** The edge index laid out for the queries (null with {@link #edgeArray}). */
+    private final SegmentQuery edgeQuery;
     private final IndexedPointInAreaLocator locator;
     private final boolean empty;
 
@@ -51,6 +52,8 @@ final class SegmentClipper {
                 all.add(new double[]{cs[i].x, cs[i].y, cs[i + 1].x, cs[i + 1].y});
             }
         }
+        // the index is only laid out for the queries and not kept
+        STRtree edges = new STRtree();
         if (all.size() <= BRUTE_FORCE_EDGES) {
             this.edgeArray = all.toArray(new double[0][]);
         } else {
@@ -60,6 +63,7 @@ final class SegmentClipper {
             }
         }
         edges.build();
+        this.edgeQuery = edgeArray == null ? new SegmentQuery(edges) : null;
         this.empty = all.isEmpty();
         this.locator = g instanceof Polygonal && !g.isEmpty() ? new IndexedPointInAreaLocator(g) : null;
         if (locator != null) {
@@ -94,7 +98,7 @@ final class SegmentClipper {
         double dx = b.x - a.x;
         double dy = b.y - a.y;
         Envelope env = new Envelope(a, b);
-        List<?> candidates = edgeArray != null ? java.util.Arrays.asList(edgeArray) : edges.query(env);
+        List<?> candidates = edgeArray != null ? java.util.Arrays.asList(edgeArray) : edgesAlong(a, b, env);
         for (Object o : candidates) {
             double[] e = (double[]) o;
             if (edgeArray != null && (Math.max(e[0], e[2]) < env.getMinX() || Math.min(e[0], e[2]) > env.getMaxX()
@@ -170,7 +174,64 @@ final class SegmentClipper {
 
     /** true if the segment touches or crosses the geometry (polygons: also lies inside). */
     boolean intersects(Coordinate a, Coordinate b) {
-        return !hits(a, b).isEmpty() || contains(a);
+        return anyHit(a, b) || contains(a);
+    }
+
+    /** Whether {@link #hits} is not empty, without collecting and sorting the hits. */
+    private boolean anyHit(Coordinate a, Coordinate b) {
+        if (empty) {
+            return false;
+        }
+        double dx = b.x - a.x;
+        double dy = b.y - a.y;
+        double minX = Math.min(a.x, b.x);
+        double maxX = Math.max(a.x, b.x);
+        double minY = Math.min(a.y, b.y);
+        double maxY = Math.max(a.y, b.y);
+        if (edgeArray != null) {
+            for (double[] e : edgeArray) {
+                if (Math.max(e[0], e[2]) < minX || Math.min(e[0], e[2]) > maxX
+                        || Math.max(e[1], e[3]) < minY || Math.min(e[1], e[3]) > maxY) {
+                    continue;
+                }
+                if (hit(e, a, dx, dy)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return !edgeQuery.forEach(a, b, new Envelope(a, b), (double[] e) -> !hit(e, a, dx, dy));
+    }
+
+    /** Edges of the index the segment may meet, in the order of {@code edges.query(env)}. */
+    private List<Object> edgesAlong(Coordinate a, Coordinate b, Envelope env) {
+        List<Object> out = new ArrayList<>();
+        edgeQuery.forEach(a, b, env, o -> {
+            out.add(o);
+            return true;
+        });
+        return out;
+    }
+
+    /** The test of {@link #hits} for one edge: whether it adds a hit. */
+    private static boolean hit(double[] e, Coordinate a, double dx, double dy) {
+        double ex = e[2] - e[0];
+        double ey = e[3] - e[1];
+        double denom = dx * ey - dy * ex;
+        double px = e[0] - a.x;
+        double py = e[1] - a.y;
+        double len2 = dx * dx + dy * dy;
+        if (Math.abs(denom) < 1e-12 * Math.sqrt(len2 * (ex * ex + ey * ey)) + 1e-18) {
+            if (Math.abs(px * dy - py * dx) > 1e-9 * Math.sqrt(len2) + 1e-12) {
+                return false;
+            }
+            double t0 = (px * dx + py * dy) / len2;
+            double t1 = ((e[2] - a.x) * dx + (e[3] - a.y) * dy) / len2;
+            return Math.max(0, Math.min(t0, t1)) <= Math.min(1, Math.max(t0, t1));
+        }
+        double t = (px * ey - py * ex) / denom;
+        double u = (px * dy - py * dx) / denom;
+        return t >= -1e-12 && t <= 1 + 1e-12 && u >= -1e-12 && u <= 1 + 1e-12;
     }
 
     boolean contains(Coordinate c) {

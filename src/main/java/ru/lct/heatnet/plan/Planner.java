@@ -358,10 +358,17 @@ public final class Planner {
     private Candidate improve(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
                               Diagnostics diag) {
         Candidate cur = c;
+        // the OKS after the last improvement of a pass were tried on the network the next pass starts from
+        int lastChange = -1;
         for (int pass = 0; pass < params.localSearchPasses; pass++) {
             boolean better = false;
+            int changed = -1;
             List<InputModel.Oks> all = new ArrayList<>(model.getOks());
-            for (InputModel.Oks oks : all) {
+            for (int i = 0; i < all.size(); i++) {
+                if (pass > 0 && !better && i > lastChange) {
+                    break; // the same network, the same OKS: the same result as in the previous pass, no improvement
+                }
+                InputModel.Oks oks = all.get(i);
                 Draft trial = cur.draft.copy();
                 trial.remove(oks);
                 if (!trial.recompute(ref) || !tieRuleHolds(model, trial) || !mergeHolds(finder, trial, oks)) {
@@ -389,11 +396,13 @@ public final class Planner {
                     }
                     cur = new Candidate(next, un, cur.strategy, cur.explanation, score, log, c.build);
                     better = true;
+                    changed = i;
                 }
             }
             if (!better) {
                 break;
             }
+            lastChange = changed;
         }
         if (cur != c) {
             cur.explanation = c.explanation + "; схема улучшена перестройкой";
@@ -598,16 +607,42 @@ public final class Planner {
             this.model = model;
         }
 
+        /** Distances by point: the draft does not change while this OKS is searched for, the corners repeat. */
+        private final Map<RoutingContext.EdgeKey, Double> distances = new HashMap<>();
+
         @Override
         public double distance(Coordinate v) {
-            double best = Double.POSITIVE_INFINITY;
-            for (Draft.Edge e : d.edges.values()) {
-                for (int i = 0; i + 1 < e.coords.size(); i++) {
-                    best = Math.min(best, Distance.pointToSegment(v, e.coords.get(i), e.coords.get(i + 1)));
+            RoutingContext.EdgeKey key = new RoutingContext.EdgeKey(v, v);
+            Double known = distances.get(key);
+            if (known != null) {
+                return known;
+            }
+            if (segments == null) {
+                segments = new ArrayList<>();
+                for (Draft.Edge e : d.edges.values()) {
+                    for (int i = 0; i + 1 < e.coords.size(); i++) {
+                        segments.add(new Coordinate[]{e.coords.get(i), e.coords.get(i + 1)});
+                    }
                 }
             }
+            // the smallest distance to a segment; a segment whose envelope is farther than the best one found so far
+            // cannot be the smallest (the margin covers the rounding of the distance)
+            double best = Double.POSITIVE_INFINITY;
+            for (Coordinate[] s : segments) {
+                double dx = Math.max(0, Math.max(Math.min(s[0].x, s[1].x) - v.x, v.x - Math.max(s[0].x, s[1].x)));
+                double dy = Math.max(0, Math.max(Math.min(s[0].y, s[1].y) - v.y, v.y - Math.max(s[0].y, s[1].y)));
+                double lim = best + 1e-6;
+                if (dx > lim || dy > lim || dx * dx + dy * dy > lim * lim) {
+                    continue;
+                }
+                best = Math.min(best, Distance.pointToSegment(v, s[0], s[1]));
+            }
+            distances.put(key, best);
             return best;
         }
+
+        /** Segments of the draft (it does not change while this OKS is searched for). */
+        private List<Coordinate[]> segments;
 
         @Override
         public List<TieOption> attachOptions(Coordinate v, PipeSpec pipe, double flow) {
@@ -921,8 +956,10 @@ public final class Planner {
         // The mandatory model does not rebuild the existing network (appendix 2.4, clarification 14). The
         // capacity check is kept as an informational layer only: it never enters the cost, the score or the
         // output file, and it answers ТЗ 2.5 (load of the existing network) in the UI and the API.
-        ReconstructionCalculator rc = new ReconstructionCalculator(model, ref);
-        List<ReconstructionCalculator.Piece> recon = rc.compute(loads, diag);
+        // A trial assembly gives the score only: the layer is not needed there (its diagnostics are dropped too).
+        List<ReconstructionCalculator.Piece> recon = TRIAL.equals(variantId)
+                ? Collections.<ReconstructionCalculator.Piece>emptyList()
+                : new ReconstructionCalculator(model, ref).compute(loads, diag);
         for (ReconstructionCalculator.Piece pc : recon) {
             if (pc.to - pc.from >= ReconstructionCalculator.MIN_RECON_PIECE_M) {
                 Variant.FlowChange fc = new Variant.FlowChange();

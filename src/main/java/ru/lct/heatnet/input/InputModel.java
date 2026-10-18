@@ -216,16 +216,67 @@ public final class InputModel {
         if (segments.isEmpty()) {
             return Double.POSITIVE_INFINITY;
         }
-        Point p = ru.lct.heatnet.geo.Crs.UTM_FACTORY.createPoint(c);
-        Object nearest = segmentIndex.nearestNeighbour(new Envelope(c), p,
-                (a, b) -> {
-                    Object ia = a.getItem();
-                    Object ib = b.getItem();
-                    Geometry ga = ia instanceof Segment ? ((Segment) ia).line : (Geometry) ia;
-                    Geometry gb = ib instanceof Segment ? ((Segment) ib).line : (Geometry) ib;
-                    return ga.distance(gb);
-                });
-        return nearest == null ? Double.POSITIVE_INFINITY : ((Segment) nearest).line.distance(p);
+        DistanceKey key = new DistanceKey(c.x, c.y);
+        Double known = networkDistances.get(key);
+        if (known != null) {
+            return known;
+        }
+        // one of the two items is the query point, the other a segment of the index
+        Object nearest = segmentIndex.nearestNeighbour(new Envelope(c), c,
+                (a, b) -> distance(a.getItem() instanceof Segment ? (Segment) a.getItem() : (Segment) b.getItem(), c));
+        double d = nearest == null ? Double.POSITIVE_INFINITY : distance((Segment) nearest, c);
+        if (networkDistances.size() < NETWORK_DISTANCES_MAX) {
+            networkDistances.put(key, d);
+        }
+        return d;
+    }
+
+    /**
+     * {@code line.distance(point)} of JTS ({@code DistanceOp} for a line and a point): the smallest distance to a
+     * segment of the line, by the same {@code Distance.pointToSegment}, without building the geometries.
+     */
+    private static double distance(Segment s, Coordinate c) {
+        Coordinate[] cs = s.line.getCoordinates();
+        if (cs.length == 0) {
+            return 0.0;
+        }
+        double min = Double.MAX_VALUE;
+        for (int i = 0; i < cs.length - 1; i++) {
+            double d = org.locationtech.jts.algorithm.Distance.pointToSegment(c, cs[i], cs[i + 1]);
+            if (d < min) {
+                min = d;
+            }
+            if (min <= 0) {
+                break;
+            }
+        }
+        return min;
+    }
+
+    /** Distances to the network by point: the searches ask for the same corners again and again. */
+    private final Map<DistanceKey, Double> networkDistances = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int NETWORK_DISTANCES_MAX = 500_000;
+
+    private static final class DistanceKey {
+        final double x;
+        final double y;
+
+        DistanceKey(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof DistanceKey && Double.doubleToLongBits(((DistanceKey) o).x) == Double.doubleToLongBits(x)
+                    && Double.doubleToLongBits(((DistanceKey) o).y) == Double.doubleToLongBits(y);
+        }
+
+        @Override
+        public int hashCode() {
+            long h = Double.doubleToLongBits(x) * 31 + Double.doubleToLongBits(y);
+            return (int) (h ^ (h >>> 32));
+        }
     }
 
     public List<Chamber> chambersNear(Coordinate c, double radius) {

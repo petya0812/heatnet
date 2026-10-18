@@ -54,10 +54,19 @@ public final class TieOption {
         return chamber != null ? chamber.id : segment != null ? segment.id : null;
     }
 
+    /** The key follows from final fields only: made once (the search asks for it again and again). */
+    private String key;
+
     public String key() {
-        if (isAttach()) {
-            return attachNodeId > 0 ? "j:" + attachNodeId : String.format("e:%d:%.2f", attachEdgeId, attachPos);
+        String k = key;
+        if (k == null) {
+            if (isAttach()) {
+                k = attachNodeId > 0 ? "j:" + attachNodeId : String.format("e:%d:%.2f", attachEdgeId, attachPos);
+            } else {
+                k = chamber != null ? "c:" + chamber.id : String.format("s:%s:%.2f", segment.id, t);
+            }
+            key = k;
         }
-        return chamber != null ? "c:" + chamber.id : String.format("s:%s:%.2f", segment.id, t);
+        return k;
     }
 }

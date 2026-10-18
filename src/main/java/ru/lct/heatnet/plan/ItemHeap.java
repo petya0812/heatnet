@@ -16,6 +16,8 @@ final class ItemHeap {
     Object[] tie = new Object[1024];
     Object[] edge = new Object[1024];
     private int[] heap = new int[1024];
+    /** Keys of the items in {@link #heap}, in the same places: the sifts compare them without the indirection. */
+    private double[] heapKey = new double[1024];
     private int size;
     private int items;
 
@@ -54,41 +56,46 @@ final class ItemHeap {
         edge[it] = edgeEval;
         if (size == heap.length) {
             heap = Arrays.copyOf(heap, size * 2);
+            heapKey = Arrays.copyOf(heapKey, size * 2);
         }
         int i = size++;
         while (i > 0) {
             int p = (i - 1) >>> 1;
-            if (key[heap[p]] <= k) {
+            if (heapKey[p] <= k) {
                 break;
             }
             heap[i] = heap[p];
+            heapKey[i] = heapKey[p];
             i = p;
         }
         heap[i] = it;
+        heapKey[i] = k;
     }
 
     /** Removes the item with the smallest key and returns its index. */
     int pop() {
         int top = heap[0];
         int last = heap[--size];
+        double k = heapKey[size];
         int i = 0;
-        double k = key[last];
         while (true) {
             int c = 2 * i + 1;
             if (c >= size) {
                 break;
             }
-            if (c + 1 < size && key[heap[c + 1]] < key[heap[c]]) {
+            if (c + 1 < size && heapKey[c + 1] < heapKey[c]) {
                 c++;
             }
-            if (key[heap[c]] >= k) {
+            if (heapKey[c] >= k) {
                 break;
             }
             heap[i] = heap[c];
+            heapKey[i] = heapKey[c];
             i = c;
         }
         if (size > 0) {
             heap[i] = last;
+            heapKey[i] = k;
         }
         return top;
     }

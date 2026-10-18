@@ -439,8 +439,8 @@ public final class RouteFinder {
                 RoutingContext.EdgeEval e = ctx.evaluate(x.c, q, ex, null);
                 if (e.valid) {
                     leg = new Start(q, heading, x, e, PREFERENCE * rank++);
-                } else if (e.reason != null && e.reason.startsWith("crosses ")
-                        && e.reason.endsWith(" " + oks.ownBuildingId)) {
+                } else if (e.reason() != null && e.reason().startsWith("crosses ")
+                        && e.reason().endsWith(" " + oks.ownBuildingId)) {
                     intoOwnBuilding[0] = true;
                 }
             }
@@ -662,6 +662,10 @@ public final class RouteFinder {
         // ways between points do not depend on the heading the route arrives with: evaluated once
         Map<Object, Step> wayCache = new HashMap<>();
         List<List<TieOption>> goalsOf = new ArrayList<>(Collections.<List<TieOption>>nCopies(n, null));
+        Map<GoalKey, RoutingContext.Endpoint> goalEnds = new HashMap<>();
+        Moves[] movesOf = new Moves[n];
+        // the neighbours of a point are the same for every heading it is reached with
+        List<List<Integer>> neighboursOf = new ArrayList<>(Collections.<List<Integer>>nCopies(n, null));
         double bestGoal = Double.POSITIVE_INFINITY;
         int expansions = 0;
         while (!pq.isEmpty()) {
@@ -694,7 +698,15 @@ public final class RouteFinder {
                     }
                     return r;
                 }
-                RoutingContext.Endpoint et = goalEndpoint(ctx, itTie);
+                // the end at a goal depends on the goal only
+                GoalKey gk = new GoalKey(itTie);
+                RoutingContext.Endpoint et;
+                if (goalEnds.containsKey(gk)) {
+                    et = goalEnds.get(gk);
+                } else {
+                    et = goalEndpoint(ctx, itTie);
+                    goalEnds.put(gk, et);
+                }
                 if (et == null) {
                     continue;
                 }
@@ -804,8 +816,43 @@ public final class RouteFinder {
                     }
                 }
             }
-            for (int w : neighbours(vertexIndex, verts, cu, n,
-                    frame == null ? params.neighbourRadiusM : params.frameNeighbourRadiusM)) {
+            List<Integer> near = neighboursOf.get(uv);
+            if (near == null) {
+                near = neighbours(vertexIndex, verts, cu, n,
+                        frame == null ? params.neighbourRadiusM : params.frameNeighbourRadiusM);
+                neighboursOf.set(uv, near);
+            }
+            if (frame != null) {
+                // with directions a point is expanded once per heading: its moves are laid out once
+                Moves mv = movesOf[uv];
+                if (mv == null) {
+                    mv = moves(frame, verts, uv, near);
+                    movesOf[uv] = mv;
+                }
+                for (int k = 0; k < mv.size; k++) {
+                    Coordinate mid = mv.mid[k];
+                    double turn = turnScore(frame, hin, mv.first[k], atStart);
+                    if (turn < 0) {
+                        continue;
+                    }
+                    int w = mv.w[k];
+                    if (start != null) {
+                        double out = startTurn(start, cu, mid == null ? verts.get(w) : mid);
+                        if (out < 0) {
+                            continue;
+                        }
+                        turn += out;
+                    }
+                    int ws = w * hs + mv.last[k];
+                    double lower = g[u] + turn + (mid == null ? 0 : params.turnPenaltyScore) + mv.length[k] * minPerM;
+                    if (closed[ws] || lower >= best[ws] || lower + h[w] >= bestGoal) {
+                        continue;
+                    }
+                    pq.push(lower + h[w], ws, u, null, new Pending(mid, mv.variant[k]), lower);
+                }
+                continue;
+            }
+            for (int w : near) {
                 if (w == uv) {
                     continue;
                 }
@@ -835,6 +882,70 @@ public final class RouteFinder {
             }
         }
         return null;
+    }
+
+    /**
+     * Moves from a point to its neighbours along the directions, in the order the search looks at them: the
+     * neighbour, the turning point of the way (null — one leg) and its number among the ways, the first and the last
+     * heading, the length. Ways with a too short leg are left out (the search never takes them).
+     */
+    private static final class Moves {
+        int size;
+        int[] w;
+        Coordinate[] mid;
+        int[] variant;
+        int[] first;
+        int[] last;
+        double[] length;
+
+        Moves(int capacity) {
+            w = new int[capacity];
+            mid = new Coordinate[capacity];
+            variant = new int[capacity];
+            first = new int[capacity];
+            last = new int[capacity];
+            length = new double[capacity];
+        }
+
+        void add(int to, Coordinate m, int v, int fh, int lh, double len) {
+            if (size == w.length) {
+                int c = Math.max(4, size * 2);
+                w = Arrays.copyOf(w, c);
+                mid = Arrays.copyOf(mid, c);
+                variant = Arrays.copyOf(variant, c);
+                first = Arrays.copyOf(first, c);
+                last = Arrays.copyOf(last, c);
+                length = Arrays.copyOf(length, c);
+            }
+            w[size] = to;
+            mid[size] = m;
+            variant[size] = v;
+            first[size] = fh;
+            last[size] = lh;
+            length[size] = len;
+            size++;
+        }
+    }
+
+    private Moves moves(Frame frame, List<Coordinate> verts, int uv, List<Integer> near) {
+        Coordinate cu = verts.get(uv);
+        Moves mv = new Moves(near.size() * 2);
+        for (int w : near) {
+            if (w == uv) {
+                continue;
+            }
+            Coordinate cw = verts.get(w);
+            List<Coordinate> mids = ways(frame, cu, cw);
+            for (int m = 0; m < mids.size(); m++) {
+                Coordinate mid = mids.get(m);
+                if (shortLeg(cu, mid, cw)) {
+                    continue;
+                }
+                mv.add(w, mid, m, firstHeading(frame, cu, mid, cw), lastHeading(frame, cu, mid, cw),
+                        wayLength(cu, mid, cw));
+            }
+        }
+        return mv;
     }
 
     /** Heading of arrival of a search state; the last slot of a point is the start without a direction. */
@@ -922,7 +1033,7 @@ public final class RouteFinder {
         RoutingContext.EdgeEval e1 = ctx.evaluate(a, end1, ea, mid == null ? eb : null);
         if (!e1.valid) {
             if (trace != null) {
-                trace.reject(a, end1, e1.reason);
+                trace.reject(a, end1, e1.reason());
             }
             return null;
         }
@@ -933,7 +1044,7 @@ public final class RouteFinder {
         RoutingContext.EdgeEval e2 = ctx.evaluate(mid, b, null, eb);
         if (!e2.valid) {
             if (trace != null) {
-                trace.reject(mid, b, e2.reason);
+                trace.reject(mid, b, e2.reason());
             }
             return null;
         }
@@ -1208,6 +1319,38 @@ public final class RouteFinder {
             return et;
         }
         return ctx.endpoint(goal.point, ctx.specialsAround(goal.point, 0.05));
+    }
+
+    /** What {@link #goalEndpoint} depends on: the point of the goal, whether it joins the new network, its DN. */
+    private static final class GoalKey {
+        final String key;
+        final long x;
+        final long y;
+        final boolean attach;
+        final int dn;
+
+        GoalKey(TieOption t) {
+            key = t.key();
+            x = Double.doubleToLongBits(t.point.x);
+            y = Double.doubleToLongBits(t.point.y);
+            attach = t.isAttach();
+            dn = t.attachDn;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof GoalKey)) {
+                return false;
+            }
+            GoalKey k = (GoalKey) o;
+            return x == k.x && y == k.y && attach == k.attach && dn == k.dn && key.equals(k.key);
+        }
+
+        @Override
+        public int hashCode() {
+            long h = x * 31 + y;
+            return ((int) (h ^ (h >>> 32)) * 31 + dn + (attach ? 1 : 0)) * 31 + key.hashCode();
+        }
     }
 
     /** Alternatives of a tie-in kept for the journal. */
