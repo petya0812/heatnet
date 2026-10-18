@@ -6,7 +6,7 @@
 import {computed, ref, watch} from 'vue';
 import {RouterLink, useRouter} from 'vue-router';
 import {ArrowRight, Check, CircleAlert, Clapperboard, Download, Ellipsis, GitCompareArrows, Lightbulb, MapPin, Merge, Pencil, Pin, PinOff,
-  Route, Ruler, Search, SlidersHorizontal, ShieldAlert, ShieldCheck, StickyNote, TriangleAlert, Trophy, Wrench, X, CircleDot, ListTree, Building2} from 'lucide-vue-next';
+  Route, Ruler, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck, StickyNote, TriangleAlert, Trophy, Wrench, X, CircleDot, ListTree, Building2} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
 import {ago, cap, count, fmt, isActive, metres, mln, natural, rub, splitName} from '@/lib/format';
@@ -78,13 +78,13 @@ const shortfalls = computed(() => (app.variantData ? d.value.recon.length : v.va
 const filter = ref<'all' | 'unconnected'>('all');
 const oksQuery = ref('');
 const showAllOks = ref(false);
-const allOks = computed(() => (v.value?.oks || []).slice().sort((a: any, b: any) => natural(a.oks_id, b.oks_id)));
+const allOks = computed(() => (v.value?.oks || []).slice().sort((a: any, b: any) => (a.connected === b.connected ? natural(a.oks_id, b.oks_id) : a.connected ? 1 : -1)));
 const unconnected = computed(() => allOks.value.filter((o: any) => !o.connected));
 const oksList = computed(() => {
   const q = oksQuery.value.trim().toLowerCase();
   return allOks.value.filter((o: any) => (filter.value === 'all' || !o.connected) && (!q || String(o.oks_id).toLowerCase().includes(q)));
 });
-const oksShown = computed(() => (showAllOks.value || oksQuery.value ? oksList.value : oksList.value.slice(0, 10)));
+const oksShown = computed(() => (showAllOks.value || oksQuery.value ? oksList.value : oksList.value.slice(0, 30)));
 const oksSection = ref<HTMLElement | null>(null);
 function onlyUnconnected() {
   filter.value = 'unconnected';
@@ -98,6 +98,7 @@ const joinsText = (o: any) => (o.joins === 'tie_in'
 // ------------------------------------------------------------------ the card of an OKS
 
 const oks = computed(() => (app.oksId ? (v.value?.oks || []).find((x: any) => x.oks_id === app.oksId) : null));
+const oksIndex = computed(() => allOks.value.findIndex((x: any) => x.oks_id === app.oksId));
 const journal = ref<any>(null);
 let journalFor: string | null = null;
 async function ensureJournal() {
@@ -197,6 +198,13 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
     <template #title-extra>
       <UiBadge v-if="oks" :tone="oks.connected ? 'ok' : 'bad'" size="md" dot>{{ oks.connected ? 'подключён' : 'не подключён' }}</UiBadge>
     </template>
+    <template #sub>
+      <div v-if="oksIndex >= 0" class="mt-2 flex items-center gap-1">
+        <UiIconButton :icon="ChevronLeft" label="Предыдущий ОКС" size="sm" variant="secondary" :disabled="oksIndex <= 0" @click="goOks(allOks[oksIndex - 1].oks_id)" />
+        <span class="num px-1 text-[13px] text-ink-3">{{ oksIndex + 1 }} из {{ allOks.length }}</span>
+        <UiIconButton :icon="ChevronRight" label="Следующий ОКС" size="sm" variant="secondary" :disabled="oksIndex >= allOks.length - 1" @click="goOks(allOks[oksIndex + 1].oks_id)" />
+      </div>
+    </template>
 
     <UiEmpty v-if="!oks" :icon="MapPin" title="ОКС не найден в этом варианте" :text="app.oksId" />
 
@@ -234,7 +242,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
       <div v-if="oks.shared_with.length" class="text-[13px] text-ink-2">
         <span class="text-ink-3">Общая сеть с ОКС:</span>
         <span class="ml-1 inline-flex flex-wrap gap-1 align-middle">
-          <button v-for="x in oks.shared_with" :key="x" type="button" class="h-6 rounded-md bg-surface-3 px-1.5 text-xs font-medium text-ink-2 hover:bg-accent-soft hover:text-accent-ink" @click="goOks(x)">{{ x }}</button>
+          <button v-for="x in oks.shared_with.slice().sort(natural)" :key="x" type="button" class="h-8 min-w-8 rounded-lg bg-surface-3 px-2 text-[13px] font-medium text-ink-2 hover:bg-accent-soft hover:text-accent-ink" :aria-label="'ОКС ' + x" @click="goOks(x)">{{ x }}</button>
         </span>
       </div>
 
@@ -256,8 +264,8 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
           <thead><tr><th>Участок</th><th class="r">ДУ</th><th class="r">т/ч</th><th class="r">Длина</th><th class="r"><UiTerm term="предельная длина" text="Предел" /></th></tr></thead>
           <tbody>
             <tr v-for="f in oksDetail?.segs" :key="f.properties.id" class="click" tabindex="0" @click="showSeg(f.properties.id)" @keydown.enter="showSeg(f.properties.id)">
-              <td class="font-mono text-xs">
-                {{ f.properties.id.replace(/^v\d+-/, '') }}
+              <td class="text-[13px]">
+                {{ f.properties.id.replace(/^v\d+-seg-/, 'участок ').replace(/^v\d+-/, '') }}
                 <UiBadge v-if="f.properties.laying_method === 'special'" tone="warn" class="ml-1">спецпроход ×{{ fmt(f.properties.k, 2) }}</UiBadge>
               </td>
               <td class="r">{{ f.properties.diameter }}</td>
@@ -297,16 +305,15 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
     </template>
 
     <template #footer>
-      <UiButton v-if="oks" variant="secondary" :icon="MapPin" @click="showPath(oks.oks_id)">На карте</UiButton>
-      <UiButton v-if="oks" variant="secondary" :icon="Search" :loading="searching" @click="searchTrace(oks.oks_id)">Поиск трассы</UiButton>
-      <span class="flex-1" />
-      <UiIconButton v-if="oks" :icon="Clapperboard" label="Показать подключение в построении" variant="secondary" @click="replay(oks.oks_id)" />
+      <UiButton v-if="oks" size="sm" variant="secondary" :icon="MapPin" @click="showPath(oks.oks_id)">На карте</UiButton>
+      <UiButton v-if="oks" size="sm" variant="secondary" :icon="Search" :loading="searching" @click="searchTrace(oks.oks_id)">Поиск трассы</UiButton>
+      <UiButton v-if="oks" size="sm" variant="secondary" :icon="Clapperboard" @click="replay(oks.oks_id)">Построение</UiButton>
     </template>
   </PanelLayout>
 
   <!-- ============================================================ the variant -->
   <PanelLayout v-else :title="run ? run.name || 'Расчёт' : 'Результат'" eyebrow="Шаг 4 · Результат"
-    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'История расчётов'}">
+    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'К истории расчётов'}">
     <template #title-extra>
       <Pin v-if="run?.pinned" class="size-4 shrink-0 text-ink-3" aria-label="Закреплён" />
       <UiMenu v-if="run" :items="runMenu"><UiIconButton :icon="Ellipsis" label="Действия с расчётом" size="sm" /></UiMenu>
@@ -349,36 +356,33 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
             <Trophy v-if="x.rank === 1" class="size-3.5 text-trophy" aria-label="лучший" />Вариант {{ x.variant_id }}
             <span class="ml-auto text-xs font-medium text-ink-3">{{ x.rank }} место</span>
           </div>
-          <div class="num mt-1 text-[22px] font-semibold leading-none tracking-tight text-ink">S {{ fmt(x.score, 2) }}</div>
+          <div class="mt-1 flex items-baseline gap-1.5"><span class="text-[22px] font-semibold leading-none tracking-tight text-ink">S {{ fmt(x.score, 2) }}</span></div>
           <div class="mt-1.5 text-xs text-ink-3">{{ fmt(x.calculated_cost / 1e6, 1) }} млн ₽ · {{ x.strategy === 'separate' ? 'раздельное' : 'совместное' }}</div>
         </button>
       </div>
 
+      <p class="-mt-1 px-0.5 text-xs text-ink-3"><UiTerm term="оценка S" text="Оценка S" /> — меньше лучше: 0,7 · стоимость / 25 млн ₽ + 0,3 · длина / 100 м.</p>
       <p class="px-0.5 text-[14px] leading-relaxed text-ink">{{ v.plain }}</p>
 
-      <!-- status of the variant -->
-      <div class="flex flex-wrap gap-1.5">
-        <UiTooltip content="Результат перечитан из файла выгрузки и проверен по обязательным правилам независимо от расчёта">
-          <span tabindex="0" class="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium" :class="val.errors ? 'bg-bad-soft text-bad' : 'bg-ok-soft text-ok'">
-            <component :is="val.errors ? ShieldAlert : ShieldCheck" class="size-4" aria-hidden="true" />
-            {{ val.errors ? `Нарушений правил: ${val.errors}` : `Проверка правил пройдена${rulesChecked ? ` · ${rulesChecked}` : ''}` }}
-          </span>
-        </UiTooltip>
-        <button v-if="unconnected.length" type="button" class="inline-flex h-8 items-center gap-1.5 rounded-full bg-warn-soft px-3 text-[13px] font-medium text-warn hover:brightness-95" @click="onlyUnconnected">
-          <TriangleAlert class="size-4" aria-hidden="true" />Не подключены: {{ unconnected.length }} ОКС
-        </button>
-      </div>
-      <UiExpandRow v-if="val.violations?.length" class="card !border-b px-3">
-        <template #lead><CircleAlert class="size-4 text-warn" aria-hidden="true" /></template>
-        <template #title>{{ val.errors ? `Нарушения (${val.errors})` : `Замечания проверки (${val.violations.length})` }}</template>
-        <ul class="space-y-1 text-xs">
+      <!-- check of the rules: one block — the rules, then the notes (not violations) if there are any -->
+      <UiExpandRow class="card !border-b px-3" :class="val.errors ? '!border-bad/40 bg-bad-soft' : ''">
+        <template #lead><component :is="val.errors ? ShieldAlert : ShieldCheck" class="size-4" :class="val.errors ? 'text-bad' : 'text-ok'" aria-hidden="true" /></template>
+        <template #title>
+          <span :class="val.errors ? 'font-medium text-bad' : ''">{{ val.errors ? `Нарушений правил: ${val.errors}` : `Обязательные правила выполнены${rulesChecked ? ` · ${rulesChecked}` : ''}` }}</span>
+          <span v-if="val.violations?.length && !val.errors" class="text-ink-3"> · замечаний {{ val.violations.length }}</span>
+        </template>
+        <p class="mb-1.5 text-xs text-ink-3">Результат перечитан из файла выгрузки и проверен по обязательным правилам независимо от расчёта.</p>
+        <ul v-if="val.violations?.length" class="space-y-1 text-xs">
           <li v-for="(x, i) in val.violations" :key="i" class="font-mono leading-snug">{{ x }}</li>
         </ul>
       </UiExpandRow>
+      <button v-if="unconnected.length" type="button" class="flex w-full items-center gap-2 rounded-[14px] bg-warn-soft px-3 py-2.5 text-left text-[13.5px] font-medium text-warn hover:brightness-95" @click="onlyUnconnected">
+        <TriangleAlert class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">Без трассы: {{ count(unconnected.length, 'ОКС', 'ОКС', 'ОКС') }} — показать в списке</span><ArrowRight class="size-4" aria-hidden="true" />
+      </button>
 
       <!-- figures -->
       <div class="grid grid-cols-3 gap-2">
-        <UiStat label="Оценка S" :value="fmt(v.score, 2)" hint="S = 0,7 · стоимость / 25 млн + 0,3 · длина / 100 м; меньше — лучше" tone="accent" />
+        <UiStat label="Подключено" :value="`${allOks.length - unconnected.length} из ${allOks.length}`" :tone="unconnected.length ? 'bad' : 'ok'" />
         <UiStat label="Стоимость" :value="fmt(v.calculated_cost / 1e6, 1)" unit="млн ₽" />
         <UiStat label="Новая сеть" :value="metres(v.new_network_length)" />
         <UiStat label="Врезок" :value="fmt(v.tie_ins)" :hint="`из них в существующие камеры: ${fmt(v.existing_chamber_tie_in_count)}`" />
@@ -426,13 +430,16 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
           <li v-for="o in oksShown" :key="o.oks_id">
             <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-2" @click="goOks(o.oks_id)"
               @mouseenter="hoverOks(o.oks_id)" @mouseleave="unhoverOks" @focus="hoverOks(o.oks_id)" @blur="unhoverOks">
-              <span class="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold" :class="o.connected ? 'bg-surface-3 text-ink' : 'bg-bad-soft text-bad'">{{ o.oks_id }}</span>
+              <span class="size-2 shrink-0 rounded-full" :class="o.connected ? 'bg-ok' : 'bg-bad'" aria-hidden="true" />
               <span class="min-w-0 flex-1">
-                <span v-if="o.connected" class="flex items-center gap-1 truncate text-[13px] text-ink">
-                  <component :is="o.joins === 'tie_in' ? Merge : CircleDot" class="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />{{ joinsText(o) }}
+                <span class="flex items-baseline gap-2">
+                  <span class="text-[13.5px] font-semibold text-ink">ОКС {{ o.oks_id }}</span>
+                  <span v-if="o.connected" class="num ml-auto shrink-0 text-[13px] text-ink">{{ fmt(o.own_cost / 1e6, 1) }} <span class="text-xs text-ink-3">млн ₽</span></span>
                 </span>
-                <span v-else class="block truncate text-[13px] text-bad">{{ cap(o.reason_text) || 'Без трассы' }}</span>
-                <span class="num block text-xs text-ink-3">{{ fmt(o.flow_tph, 1) }} т/ч<template v-if="o.connected"> · ДУ {{ o.diameter }} · ветка {{ fmt(o.own_length, 0) }} м · {{ fmt(o.own_cost / 1e6, 1) }} млн ₽</template></span>
+                <span v-if="o.connected" class="num block truncate text-xs text-ink-3">
+                  {{ o.joins === 'tie_in' ? 'своя врезка' : 'разветвление' }} {{ o.tie_object_id }} · {{ fmt(o.flow_tph, 1) }} т/ч · ДУ {{ o.diameter }} · {{ fmt(o.own_length, 0) }} м
+                </span>
+                <span v-else class="block truncate text-xs text-bad">{{ cap(o.reason_text) || 'Без трассы' }}</span>
               </span>
               <ArrowRight class="size-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true" />
             </button>
@@ -467,7 +474,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
         <table class="tbl">
           <thead><tr><th>Участок</th><th class="r">ДУ</th><th class="r">Длина</th><th class="r">млн ₽</th></tr></thead>
           <tbody><tr v-for="f in d.specials" :key="f.properties.id" class="click" @click="showSeg(f.properties.id)">
-            <td class="font-mono text-xs">{{ f.properties.id }}</td>
+            <td>{{ f.properties.id.replace(/^v\d+-seg-/, 'участок ').replace(/^v\d+-/, '') }}</td>
             <td class="r">{{ f.properties.diameter }}</td><td class="r">{{ fmt(f.properties.length, 0) }} м</td><td class="r">{{ fmt(f.properties.cost / 1e6, 2) }}</td>
           </tr></tbody>
         </table>

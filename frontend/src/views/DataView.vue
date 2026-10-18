@@ -4,7 +4,7 @@
 
 import {computed, onMounted, ref, watch} from 'vue';
 import {useRouter} from 'vue-router';
-import {ArrowRight, CircleAlert, Ellipsis, FileUp, FolderOpen, Search, Trash2, Upload, X, Layers, GitBranch} from 'lucide-vue-next';
+import {ArrowRight, CircleAlert, Ellipsis, FileUp, FolderOpen, Info, Search, Trash2, Upload, X, Layers, GitBranch} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
 import {ago, bytes, count, fmt, GROUPS, isActive, splitName, STATUS_RU} from '@/lib/format';
@@ -19,6 +19,7 @@ import UiEmpty from '@/components/ui/UiEmpty.vue';
 import UiMenu from '@/components/ui/UiMenu.vue';
 import UiIconButton from '@/components/ui/UiIconButton.vue';
 import UiSegmented from '@/components/ui/UiSegmented.vue';
+import UiTooltip from '@/components/ui/UiTooltip.vue';
 
 const app = useApp();
 const router = useRouter();
@@ -42,8 +43,8 @@ const counts = computed(() => {
   }
   return c;
 });
-const groupOptions = computed(() => [{value: 'all', label: `Все ${counts.value.all || ''}`},
-  ...GROUPS.filter((g) => counts.value[g.key]).map((g) => ({value: g.key, label: `${g.title} ${counts.value[g.key]}`}))]);
+const groupOptions = computed(() => [{value: 'all', label: 'Все', count: counts.value.all || 0},
+  ...GROUPS.filter((g) => counts.value[g.key]).map((g) => ({value: g.key, label: g.title, count: counts.value[g.key]}))]);
 const shown = computed(() => {
   const needle = q.value.trim().toLowerCase();
   const list = roots.value.filter((d) => (group.value === 'all' || splitName(d.name).group === group.value)
@@ -128,7 +129,11 @@ const open = (id: string) => router.push({name: 'check', params: {ds: id}});
         <div class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-surface-solid text-accent shadow-soft"><Upload class="size-5" aria-hidden="true" /></div>
         <div class="min-w-0 flex-1">
           <div class="text-[14px] font-semibold">Перетащите файл GeoJSON сюда</div>
-          <div class="text-[12.5px] text-ink-3">FeatureCollection в EPSG:4326, до 3 ГБ: сеть, камеры, источник, ОКС, здания, ограничения</div>
+          <div class="flex items-center gap-1 text-[12.5px] text-ink-3">GeoJSON до 3 ГБ
+            <UiTooltip content="FeatureCollection в EPSG:4326: существующая сеть, камеры, источник, перспективные ОКС с точками подключения, здания, ограничения">
+              <button type="button" class="text-ink-4 hover:text-ink-2" aria-label="Что должно быть в файле"><Info class="size-3.5" aria-hidden="true" /></button>
+            </UiTooltip>
+          </div>
         </div>
         <UiButton variant="primary" :icon="FolderOpen" @click="fileInput?.click()">Выбрать</UiButton>
       </div>

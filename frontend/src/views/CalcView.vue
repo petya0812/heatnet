@@ -6,11 +6,11 @@
 import {computed, nextTick, onMounted, reactive, ref, watch} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
 import {ArrowRight, BookOpen, CircleAlert, Clapperboard, Ellipsis, History, Info, Lock, Pencil, Pin, PinOff, Play, RotateCcw, Route, ShieldCheck,
-  SlidersHorizontal, StickyNote, Trash2, X, LoaderCircle, Check, Database, CircleCheck} from 'lucide-vue-next';
+  SlidersHorizontal, StickyNote, Trash2, X, LoaderCircle, Check, Database, CircleCheck, Building2, ChevronDown} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
 import {ago, count, fmt, isActive, splitName, STATUS_RU} from '@/lib/format';
-import {paramVisible} from '@/lib/catalog';
+import {paramLabel, paramVisible} from '@/lib/catalog';
 import {toast} from '@/lib/toast';
 import {confirmDialog, promptDialog} from '@/lib/dialogs';
 import {prefs} from '@/lib/prefs';
@@ -35,8 +35,8 @@ const router = useRouter();
 
 /** Groups of the editable settings, in this order; the rest of the catalogue is read-only. */
 const GROUPS = [
-  {cls: 'algorithm', title: 'Трассировка', icon: Route, desc: 'Как прокладывается трасса. Могут только ужесточить правила — результат всегда проходит проверку.'},
-  {cls: 'interpretation', title: 'Как применяются правила', icon: BookOpen, desc: 'Решения там, где правило можно прочитать по-разному.'},
+  {cls: 'algorithm', title: 'Трассировка', icon: Route, desc: 'Отступы, углы, совместное подключение, повороты.'},
+  {cls: 'interpretation', title: 'Здания: ввод и проход', icon: Building2, desc: 'С какой стены трасса входит в здание и может ли идти сквозь здания.'},
   {cls: 'data_assumption', title: 'Недостающие данные', icon: Database, desc: 'Значений нет во входном файле — сервис восполняет их по правилу.'},
 ];
 const FIXED_TITLES: Record<string, string> = {
@@ -92,6 +92,12 @@ const fixed = computed(() => {
 const fixedCount = computed(() => entries.value.filter((x) => !x.editable).length);
 
 const optionsOf = (e: any) => (e.options || []).map((x: any) => ({value: x.value, label: x.label, hint: x.effect}));
+/** Folded groups (a per-viewer convenience); a folded group shows its current values in one line. */
+const folded = reactive<Record<string, boolean>>(prefs.get('calcFolded', {}));
+watch(folded, () => prefs.set('calcFolded', {...folded}));
+const summaryOf = (items: any[]) => items.filter((e) => paramVisible(e, values.value)).slice(0, 3)
+  .map((e) => `${e.title}: ${paramLabel(e, values.value[e.key])}`).join(' · ');
+
 /** Options with their own effect read better as cards: the effect of each is seen before choosing. */
 const asCards = (e: any) => (e.options || []).length > 2 || (e.options || []).some((x: any) => x.label.length > 18);
 const effectOf = (e: any) => ((e.options || []).find((x: any) => String(values.value[e.key]) === x.value) || {}).effect;
@@ -201,7 +207,7 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
 </script>
 
 <template>
-  <PanelLayout :title="title" eyebrow="Шаг 3 · Расчёт" :back="{to: {name: 'check', params: {ds: app.datasetId}}, label: 'Проверка данных'}">
+  <PanelLayout :title="title" eyebrow="Шаг 3 · Расчёт" :back="{to: {name: 'check', params: {ds: app.datasetId}}, label: 'К проверке данных'}">
     <template #title-extra>
       <UiBadge v-if="o && o.version > 1" tone="outline">версия {{ o.version }}</UiBadge>
     </template>
@@ -253,20 +259,22 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
       </div>
       <p class="-mt-1 flex items-start gap-1.5 px-1 text-[12.5px] text-ink-3">
         <ShieldCheck class="mt-px size-3.5 shrink-0 text-ok" aria-hidden="true" />
-        Настройки трассировки только ужесточают правила: результат с любыми значениями проходит проверку по техническим требованиям.
+        Любые значения только ужесточают правила — результат всегда проходит проверку по техническим требованиям.
       </p>
 
       <!-- editable groups -->
       <section v-for="g in groups" :key="g.cls" class="card" :aria-labelledby="'g-' + g.cls">
-        <header class="flex items-start gap-2.5 px-4 pb-1 pt-3.5">
+        <button type="button" class="flex w-full items-start gap-2.5 rounded-[16px] px-4 pb-2.5 pt-3.5 text-left hover:bg-surface-2" :aria-expanded="!folded[g.cls]"
+          @click="folded[g.cls] = !folded[g.cls]">
           <component :is="g.icon" class="mt-0.5 size-[18px] shrink-0 text-accent" aria-hidden="true" />
-          <div class="min-w-0 flex-1">
+          <span class="min-w-0 flex-1">
             <h3 :id="'g-' + g.cls" class="text-[14px] font-semibold">{{ g.title }}</h3>
-            <p class="text-xs text-ink-3">{{ g.desc }}</p>
-          </div>
-          <span v-if="g.items.filter(changed).length" class="mt-0.5 text-xs font-medium text-accent-ink">изменено {{ g.items.filter(changed).length }}</span>
-        </header>
-        <div class="px-2 pb-2">
+            <span class="block text-xs text-ink-3">{{ folded[g.cls] ? summaryOf(g.items) : g.desc }}</span>
+          </span>
+          <span v-if="g.items.filter(changed).length" class="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent-ink"><span class="size-1.5 rounded-full bg-accent" aria-hidden="true" />изменено {{ g.items.filter(changed).length }}</span>
+          <ChevronDown class="mt-0.5 size-4 shrink-0 text-ink-4 transition-transform" :class="folded[g.cls] ? '' : 'rotate-180'" aria-hidden="true" />
+        </button>
+        <div v-show="!folded[g.cls]" class="px-2 pb-2">
           <template v-for="e in g.items" :key="e.key">
             <div v-if="paramVisible(e, values)" :id="'param-' + e.key"
               class="relative rounded-xl px-2 py-2.5 transition-colors duration-500"
@@ -288,7 +296,7 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
               </div>
               <div class="mt-2">
                 <UiChoice v-if="(e.type === 'enum' || e.type === 'boolean') && asCards(e)" :model-value="String(values[e.key])" :options="optionsOf(e)" :label="e.title"
-                  :cols="e.options.length === 4 && e.options.every((x: any) => x.label.length <= 16) ? 2 : 1" @update:model-value="setOption(e, $event)" />
+                  :cols="1" @update:model-value="setOption(e, $event)" />
                 <UiSegmented v-else-if="e.type === 'enum' || e.type === 'boolean'" :model-value="String(values[e.key])" :options="optionsOf(e)" :label="e.title" size="sm"
                   @update:model-value="setOption(e, $event)" />
                 <div v-else-if="e.type === 'number'" class="flex items-center gap-3">
@@ -379,14 +387,14 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
     <template #footer>
       <template v-if="tab === 'new'">
         <div class="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-3">
-          <div class="font-medium text-ink-2">{{ nChanged ? count(nChanged, 'настройка изменена', 'настройки изменены', 'настроек изменено') : 'Параметры по умолчанию' }}</div>
+          <div class="font-medium text-ink-2">{{ nChanged ? `Изменено ${nChanged} из ${editable.length}` : 'Параметры по умолчанию' }}
+            <button v-if="nChanged" type="button" class="ml-1 font-medium text-accent-ink hover:underline" @click="resetAll">Сбросить</button></div>
           <div>все {{ fmt(o?.contents?.oks?.count || 0) }} ОКС набора</div>
         </div>
         <UiButton variant="primary" size="lg" :icon="Play" :loading="starting" :disabled="!app.ready" @click="start">{{ running ? 'Рассчитать ещё' : 'Рассчитать' }}</UiButton>
       </template>
       <template v-else>
-        <UiButton variant="ghost" :icon="SlidersHorizontal" @click="tab = 'new'">Новый расчёт</UiButton>
-        <span class="flex-1" />
+        <span class="flex-1 text-[12.5px] text-ink-3">{{ runs.length ? count(runs.length, 'расчёт', 'расчёта', 'расчётов') : '' }}</span>
         <UiButton v-if="app.doneRuns.length" variant="primary" :icon-right="ArrowRight" @click="openResult(app.doneRuns[0].id)">Последний результат</UiButton>
       </template>
     </template>

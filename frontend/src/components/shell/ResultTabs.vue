@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed} from 'vue';
+import {useBreakpoints} from '@vueuse/core';
 import {useRouter} from 'vue-router';
 import {Download, GitCompareArrows, Map as MapIcon} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
@@ -10,6 +11,7 @@ const app = useApp();
 const router = useRouter();
 const props = defineProps<{runA?: string | null; variantA?: string | null}>();
 
+const narrow = useBreakpoints({md: 768}).smaller('md');
 const value = computed(() => (app.view === 'compare' ? 'compare' : app.view === 'export' ? 'export' : 'result'));
 function pick(id: string) {
   const ds = app.datasetId;
@@ -24,5 +26,5 @@ function pick(id: string) {
 
 <template>
   <UiSegmented :model-value="value" label="Раздел результата" block @update:model-value="pick"
-    :options="[{value: 'result', label: 'Вариант', icon: MapIcon}, {value: 'compare', label: 'Сравнение', icon: GitCompareArrows}, {value: 'export', label: 'Выгрузка', icon: Download}]" />
+    :options="[{value: 'result', label: 'Вариант', icon: narrow ? undefined : MapIcon}, {value: 'compare', label: 'Сравнение', icon: narrow ? undefined : GitCompareArrows}, {value: 'export', label: 'Выгрузка', icon: narrow ? undefined : Download}]" />
 </template>

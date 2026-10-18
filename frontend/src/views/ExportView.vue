@@ -55,8 +55,8 @@ const pickVariant = (v: string) => router.push({name: 'export', params: {ds: app
 </script>
 
 <template>
-  <PanelLayout :title="run ? run.name || 'Расчёт' : 'Выгрузка'" eyebrow="Шаг 4 · Выгрузка"
-    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'История расчётов'}">
+  <PanelLayout :title="run ? run.name || 'Расчёт' : 'Выгрузка'" eyebrow="Шаг 4 · Результат"
+    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'К истории расчётов'}">
     <template #sub><div v-if="run" class="mt-1 text-[13px] text-ink-3">{{ ago(run.created_at) }}</div></template>
     <template #header><ResultTabs /></template>
 

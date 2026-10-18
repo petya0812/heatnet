@@ -19,7 +19,7 @@ const busy = computed(() => app.server.running + app.server.queued);
 <template>
   <header class="pointer-events-none absolute inset-x-3 top-3 z-30 flex items-start gap-2 max-md:inset-x-2 max-md:top-2">
     <div class="panel pointer-events-auto flex h-12 min-w-0 shrink items-center gap-1 rounded-full p-1.5">
-      <RouterLink to="/" class="flex h-9 shrink-0 items-center gap-2.5 rounded-full pl-1 pr-3 transition-colors hover:bg-surface-3" aria-label="Трассы подключения — к списку наборов">
+      <RouterLink to="/" class="flex h-9 shrink-0 items-center gap-2.5 rounded-full pl-1 pr-3 transition-colors hover:bg-surface-3 max-md:pr-1" :class="app.datasetId ? 'max-md:hidden' : ''" aria-label="Трассы подключения — к списку наборов">
         <BrandMark />
         <span class="leading-none max-lg:hidden">
           <span class="block text-[13.5px] font-semibold tracking-[-0.01em] text-ink">Трассы подключения</span>
@@ -27,7 +27,7 @@ const busy = computed(() => app.server.running + app.server.queued);
         </span>
       </RouterLink>
       <template v-if="app.datasetId">
-        <span class="h-5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
+        <span class="h-5 w-px shrink-0 bg-line-strong max-md:hidden" aria-hidden="true" />
         <DatasetSwitcher />
       </template>
     </div>
@@ -47,7 +47,11 @@ const busy = computed(() => app.server.running + app.server.queued);
       </UiTooltip>
       <DisplaySettings />
       <UiIconButton :icon="CircleHelp" label="Справка: порядок работы, метод, термины" side="bottom" class="rounded-full" @click="$emit('help')" />
-      <UiIconButton :icon="Code" label="Описание API (Swagger UI)" side="bottom" href="swagger-ui.html" target="_blank" class="rounded-full" />
+      <UiTooltip content="Описание API (Swagger UI), откроется в новой вкладке" side="bottom">
+        <a href="swagger-ui.html" target="_blank" rel="noopener" class="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-3 hover:text-ink">
+          <Code class="size-4" aria-hidden="true" />API
+        </a>
+      </UiTooltip>
     </div>
   </header>
 </template>

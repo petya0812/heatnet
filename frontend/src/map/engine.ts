@@ -46,7 +46,7 @@ export function createMap(container: HTMLElement) {
     zoom: 10,
     attributionControl: {compact: true},
   });
-  map.addControl(new maplibregl.ScaleControl({unit: 'metric'}), 'bottom-left');
+  map.addControl(new maplibregl.ScaleControl({unit: 'metric'}), 'bottom-right');
   const done = () => {
     if (styleReady) return;
     styleReady = true;
@@ -207,10 +207,10 @@ export async function showDataset(id: string | null, {fitTo = true, stamp = ''} 
   add({id: 'in-cp', type: 'circle', 'source-layer': 'connection_points',
     paint: {'circle-color': '#ea580c', 'circle-radius': 4, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5}});
   add({id: 'in-source', type: 'circle', 'source-layer': 'source',
-    paint: {'circle-color': '#1d2327', 'circle-radius': 8, 'circle-stroke-color': '#fbbf24', 'circle-stroke-width': 3}});
+    paint: {'circle-color': p.source, 'circle-radius': 8, 'circle-stroke-color': '#fbbf24', 'circle-stroke-width': 3}});
   defineGroup('in-network', {section: 'before', title: 'Существующая сеть', hint: 'толщина — ДУ', layers: ['in-network'], sw: p.network, kind: 'line'});
   defineGroup('in-chambers', {section: 'before', title: 'Существующие камеры', hint: 'при приближении', layers: ['in-chambers'], sw: p.chamberFill, stroke: p.network, kind: 'dot'});
-  defineGroup('in-source', {section: 'before', title: 'Источник', layers: ['in-source'], sw: '#1d2327', stroke: '#fbbf24', kind: 'dot'});
+  defineGroup('in-source', {section: 'before', title: 'Источник', layers: ['in-source'], sw: p.source, stroke: '#fbbf24', kind: 'dot'});
   defineGroup('in-oks', {section: 'before', title: 'Перспективные ОКС', hint: 'контур и точка подключения', layers: ['in-oks', 'in-oks-line', 'in-cp'], sw: '#ea580c', kind: 'dot'});
   defineGroup('in-buildings', {section: 'before', title: 'Здания', layers: ['in-buildings'], sw: p.building, kind: 'fill'});
   defineGroup('in-restr', {section: 'before', title: 'Ограничения', layers: ['in-restr-fill', 'in-restr-line', 'in-restr-point'], sw: '#b8bcc2', kind: 'fill', restrictions: true});
@@ -543,6 +543,7 @@ function applyThemeNow() {
   set('in-network', 'line-color', p.network);
   set('in-chambers', 'circle-color', p.chamberFill);
   set('in-chambers', 'circle-stroke-color', p.network);
+  set('in-source', 'circle-color', p.source);
   set('in-restr-fill', 'fill-opacity', p.restrictionOpacity);
   for (const l of ['res-seg-casing', 'res-seg-new-casing']) set(l, 'line-color', p.casing);
   for (const l of ['res-seg', 'res-seg-new']) set(l, 'line-color', dnColor());
@@ -553,6 +554,7 @@ function applyThemeNow() {
   if (groups['in-network']) groups['in-network'].sw = p.network;
   if (groups['in-buildings']) groups['in-buildings'].sw = p.building;
   if (groups['in-chambers']) Object.assign(groups['in-chambers'], {sw: p.chamberFill, stroke: p.network});
+  if (groups['in-source']) groups['in-source'].sw = p.source;
 }
 
 export function setTheme(t: 'light' | 'dark') {

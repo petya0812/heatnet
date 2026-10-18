@@ -10,7 +10,7 @@ export function paramVisible(e: any, values: Record<string, unknown>) {
 }
 
 export const CLASS_TITLES: Record<string, string> = {
-  algorithm: 'Настройка трассировки', data_assumption: 'Недостающие данные', norm: 'Технические требования', interpretation: 'Как применяются правила',
+  algorithm: 'Настройка трассировки', data_assumption: 'Недостающие данные', norm: 'Технические требования', interpretation: 'Решения сервиса',
 };
 
 /** «Отступ: 2 м», «Углы поворота: только 90°» — a changed parameter in a few words. */

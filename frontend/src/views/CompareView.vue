@@ -120,7 +120,7 @@ const [runA, varA] = [computed(() => a.value?.split(':')[0]), computed(() => a.v
 
 <template>
   <PanelLayout title="Сравнение вариантов" eyebrow="Шаг 4 · Результат"
-    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'История расчётов'}">
+    :back="{to: {name: 'calc', params: {ds: app.datasetId}, query: {tab: 'history'}}, label: 'К истории расчётов'}">
     <template #header><ResultTabs :run-a="runA" :variant-a="varA" /></template>
 
     <div v-if="family == null" class="space-y-3"><div class="skeleton h-32" /><div class="skeleton h-48" /></div>

@@ -21,9 +21,9 @@ const FLOW = [
 <template>
   <UiDialog :open="open" title="Справка" size="lg" @update:open="$emit('update:open', $event)">
     <TabsRoot v-model="tab">
-      <TabsList class="mb-4 inline-flex flex-wrap gap-0.5 rounded-xl bg-surface-3 p-[3px]" aria-label="Разделы справки">
+      <TabsList class="mb-4 inline-flex flex-wrap gap-0.5 rounded-xl bg-seg-track p-[3px]" aria-label="Разделы справки">
         <TabsTrigger v-for="[id, title] in TABS" :key="id" :value="id"
-          class="h-8 rounded-[9px] px-3 text-[13px] font-medium text-ink-2 hover:text-ink data-[state=active]:bg-surface-solid data-[state=active]:text-ink data-[state=active]:shadow-soft">{{ title }}</TabsTrigger>
+          class="h-8 rounded-[9px] px-3 text-[13px] font-medium text-ink-2 hover:text-ink data-[state=active]:bg-seg-on data-[state=active]:text-ink data-[state=active]:shadow-soft">{{ title }}</TabsTrigger>
       </TabsList>
       <TabsContent value="flow">
         <ol class="space-y-3">

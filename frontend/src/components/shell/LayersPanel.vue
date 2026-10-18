@@ -28,7 +28,7 @@ const restrictions = computed(() => Object.entries(restrictionTitleMap)
       <h2 class="flex-1 text-[15px] font-semibold">Слои</h2>
       <UiIconButton :icon="X" label="Закрыть" size="sm" @click="$emit('close')" />
     </div>
-    <div class="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+    <div class="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]">
       <p v-if="!sections.length" class="px-2 py-4 text-[13px] text-ink-3">Откройте набор — здесь появятся его слои.</p>
       <div v-for="s in sections" :key="s.key" class="mb-2">
         <div class="eyebrow px-2 pb-1 pt-2">{{ s.title }}</div>

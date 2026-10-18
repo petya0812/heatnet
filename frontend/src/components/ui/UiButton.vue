@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
   iconRight?: Component;
   loading?: boolean;
   href?: string;
-  download?: string | boolean;
+  download?: string;
   target?: string;
   block?: boolean;
   disabled?: boolean;

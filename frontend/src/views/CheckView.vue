@@ -175,7 +175,7 @@ const toCalc = () => router.push({name: 'calc', params: {ds: app.datasetId}});
 </script>
 
 <template>
-  <PanelLayout :title="title" eyebrow="Шаг 2 · Проверка данных" :back="{to: '/', label: 'Все наборы'}">
+  <PanelLayout :title="title" eyebrow="Шаг 2 · Проверка данных" :back="{to: '/', label: 'К наборам'}">
     <template #title-extra>
       <UiBadge v-if="o && o.version > 1" tone="outline">версия {{ o.version }}</UiBadge>
     </template>
