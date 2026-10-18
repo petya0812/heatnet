@@ -1,0 +1,276 @@
+@import "tailwindcss";
+@import "@fontsource-variable/onest";
+
+/*
+ * Tokens of the interface. Colours of the data on the map live in map/palette.ts — they belong to the data,
+ * not to the theme of the panels. Components use only these tokens (bg-surface, text-ink-2, border-line …).
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --canvas: #e8ebf0;
+  --surface: rgb(255 255 255 / 0.9);
+  --surface-solid: #ffffff;
+  --surface-2: #f4f6f9;
+  --surface-3: #eaeef3;
+  --line: rgb(15 23 42 / 0.08);
+  --line-strong: rgb(15 23 42 / 0.15);
+  --ink: #0f172a;
+  --ink-2: #3f4b5e;
+  --ink-3: #5f6b7d;
+  --ink-4: #98a2b3;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-ink: #1d4ed8;
+  --accent-soft: #eaf1ff;
+  --on-accent: #ffffff;
+  --ok: #047857;
+  --ok-soft: #e3f6ee;
+  --warn: #b45309;
+  --warn-soft: #fff3dc;
+  --bad: #d61f45;
+  --bad-soft: #ffebef;
+  --cmp-a: #2563eb;
+  --cmp-b: #e8590c;
+  --cmp-common: #7a8699;
+  --shadow-panel: 0 1px 2px rgb(16 24 40 / 0.05), 0 14px 36px -10px rgb(16 24 40 / 0.22);
+  --shadow-pop: 0 2px 6px rgb(16 24 40 / 0.06), 0 22px 54px -14px rgb(16 24 40 / 0.32);
+  --shadow-soft: 0 1px 2px rgb(16 24 40 / 0.06);
+  --focus: #2563eb;
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: #0b0e13;
+  --surface: rgb(21 25 32 / 0.9);
+  --surface-solid: #161a21;
+  --surface-2: #1c212a;
+  --surface-3: #252b36;
+  --line: rgb(255 255 255 / 0.07);
+  --line-strong: rgb(255 255 255 / 0.14);
+  --ink: #e9edf3;
+  --ink-2: #b9c1cd;
+  --ink-3: #8f99a8;
+  --ink-4: #5e6878;
+  --accent: #5b8cff;
+  --accent-hover: #7aa2ff;
+  --accent-ink: #9ab8ff;
+  --accent-soft: rgb(91 140 255 / 0.15);
+  --on-accent: #0b0e13;
+  --ok: #34d399;
+  --ok-soft: rgb(52 211 153 / 0.13);
+  --warn: #fbbf24;
+  --warn-soft: rgb(251 191 36 / 0.13);
+  --bad: #fb7185;
+  --bad-soft: rgb(251 113 133 / 0.14);
+  --cmp-a: #6b9bff;
+  --cmp-b: #ff8a3d;
+  --cmp-common: #8a94a6;
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 40px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.3);
+  --focus: #7aa2ff;
+}
+
+@theme inline {
+  --font-sans: "Onest Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-cmp-a: var(--cmp-a);
+  --color-cmp-b: var(--cmp-b);
+  --color-cmp-common: var(--cmp-common);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-soft: var(--shadow-soft);
+  --radius-panel: 22px;
+  --radius-card: 16px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 15px;
+}
+
+@layer base {
+  html, body, #app {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  button, [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled, [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+}
+
+@layer components {
+  /* Floating panels over the map: one look for all of them. */
+  .panel {
+    background: var(--surface);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-panel);
+  }
+  .card {
+    background: var(--surface-solid);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+  }
+  .inset {
+    background: var(--surface-2);
+    border-radius: 12px;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+  .term {
+    text-decoration: underline dotted var(--ink-4);
+    text-underline-offset: 3px;
+    cursor: help;
+  }
+  .kbd {
+    font: 600 11px/1 var(--font-sans);
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    color: var(--ink-2);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 10px;
+  }
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.enter { animation: fade-up 0.22s ease-out both; }
+
+/* Transitions of views inside the panel. */
+.view-enter-active, .view-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; }
+.view-enter-from { opacity: 0; transform: translateY(6px); }
+.view-leave-to { opacity: 0; }
+
+/* MapLibre controls in the look of the panels. */
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: none;
+  color: var(--ink-2);
+  border-radius: 0 0 6px 6px;
+  font: 500 11px var(--font-sans);
+}
+.maplibregl-ctrl-attrib {
+  background: var(--surface) !important;
+  color: var(--ink-3);
+  border-radius: 10px !important;
+  font: 11px var(--font-sans);
+}
+.maplibregl-ctrl-attrib a { color: var(--ink-2); }
+.dark .maplibregl-ctrl-attrib-button { filter: invert(1); }
+.map-label {
+  font: 600 11px/1 var(--font-sans);
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-soft);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.map-label.chosen { background: var(--ok); color: #fff; border-color: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .input {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    box-shadow: var(--shadow-soft);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .input::placeholder { color: var(--ink-4); }
+  .input:hover { border-color: color-mix(in srgb, var(--line-strong), var(--ink) 12%); }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  textarea.input { height: auto; min-height: 76px; padding: 10px 12px; resize: vertical; line-height: 1.45; }
+  .label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tbl tbody tr.click { cursor: pointer; }
+  .tbl tbody tr.click:hover td { background: var(--surface-2); }
+  .tbl th:first-child, .tbl td:first-child { padding-left: 0; }
+  .tbl th:last-child, .tbl td:last-child { padding-right: 0; }
+}

@@ -102,8 +102,8 @@ export function helpContent() {
       parts.push(dl);
     } else {
       parts.push(h('p', null, 'Всё, что делает интерфейс, доступно через HTTP API. Описание с примерами ответов и моделями — Swagger UI:'),
-        h('p', null, h('a', {class: 'button', href: 'swagger-ui.html', target: '_blank', rel: 'noopener'}, icon('code'), 'Открыть Swagger UI'), ' ',
-          h('a', {class: 'button', href: 'v3/api-docs', target: '_blank', rel: 'noopener'}, icon('file'), 'Спецификация OpenAPI')),
+        h('p', null, h('a', {class: 'button', href: '../swagger-ui.html', target: '_blank', rel: 'noopener'}, icon('code'), 'Открыть Swagger UI'), ' ',
+          h('a', {class: 'button', href: '../v3/api-docs', target: '_blank', rel: 'noopener'}, icon('file'), 'Спецификация OpenAPI')),
         h('p', {class: 'small muted'}, 'Сценарий из пяти запросов: загрузить набор → дождаться READY → запустить расчёт → дождаться DONE → забрать result.geojson. Документация к API и формату результата — в комплекте с сервисом (docs/api.md, docs/output.md, docs/parameters.md).'));
     }
     replace(body, parts);
