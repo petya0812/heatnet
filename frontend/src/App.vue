@@ -2,7 +2,8 @@
 import {computed, onMounted, ref, watch, watchEffect} from 'vue';
 import {RouterView} from 'vue-router';
 import {TooltipProvider} from 'reka-ui';
-import {ChevronDown, ChevronUp} from 'lucide-vue-next';
+import {ChevronDown, ChevronLeft, ChevronRight, ChevronUp} from 'lucide-vue-next';
+import UiTooltip from '@/components/ui/UiTooltip.vue';
 import {onKeyStroke, useBreakpoints, useElementSize} from '@vueuse/core';
 import {drawing} from '@/map/draw';
 import {dialogState} from '@/lib/dialogs';
@@ -31,6 +32,11 @@ const helpOpen = ref(false);
 const layersOpen = ref(prefs.get('layersOpen', false));
 watch(layersOpen, (v) => prefs.set('layersOpen', v));
 const sheetCollapsed = ref(false);
+// the step panel slides away to show the whole map (desktop); a tab at its edge brings it back
+const panelHidden = ref(prefs.get('panelHidden', false));
+watch(panelHidden, (v) => { prefs.set('panelHidden', v); setTimeout(() => engine.map && engine.map.resize(), 220); });
+// going to another place in the workflow shows its panel again
+watch(() => app.view, () => { panelHidden.value = false; });
 const bp = useBreakpoints({md: 768});
 const narrow = bp.smaller('md');
 
@@ -62,7 +68,7 @@ onMounted(() => {
 const {width: panelW, height: panelH} = useElementSize(panelEl);
 const {height: playerH} = useElementSize(playerEl);
 watchEffect(() => {
-  engine.insets.left = narrow.value ? 0 : panelW.value + 12;
+  engine.insets.left = narrow.value || panelHidden.value ? 0 : panelW.value + 12;
   engine.insets.right = narrow.value ? 0 : (layersOpen.value ? 300 + 70 : 64) + (engine.picked.value ? 0 : 0);
   engine.insets.bottom = narrow.value ? panelH.value + 16 : player.player.open ? playerH.value + 16 : 0;
 });
@@ -87,8 +93,9 @@ watchEffect(() => {
       <TopBar @help="helpOpen = true" />
 
       <main id="panel" ref="panelEl" tabindex="-1"
-        class="panel absolute z-20 flex flex-col overflow-hidden transition-[width] duration-200 focus:outline-none md:bottom-3 md:left-3 md:top-[72px]"
+        class="panel absolute z-20 flex flex-col overflow-hidden transition-[width,transform,opacity] duration-200 focus:outline-none md:bottom-3 md:left-3 md:top-[72px]"
         :class="[narrow ? 'inset-x-2 bottom-2 rounded-b-[22px]' : wide ? 'w-[520px]' : 'w-[420px]',
+          !narrow && panelHidden ? 'pointer-events-none -translate-x-[calc(100%+24px)] opacity-0' : '',
           narrow ? (sheetCollapsed ? 'h-[132px]' : 'h-[62dvh]') : '']">
         <button v-if="narrow" type="button" class="flex h-6 shrink-0 items-center justify-center text-ink-3" :aria-label="sheetCollapsed ? 'Развернуть панель' : 'Свернуть панель'"
           @click="sheetCollapsed = !sheetCollapsed">
@@ -100,6 +107,13 @@ watchEffect(() => {
           </Transition>
         </RouterView>
       </main>
+      <UiTooltip v-if="!narrow" :content="panelHidden ? 'Показать панель' : 'Скрыть панель — вся карта'" side="right">
+        <button type="button" class="panel absolute top-1/2 z-20 flex h-14 w-6 -translate-y-1/2 items-center justify-center !rounded-l-none !rounded-r-xl text-ink-3 transition-[left] duration-200 hover:text-ink"
+          :style="{left: (panelHidden ? 0 : panelW + 12) + 'px'}" :aria-label="panelHidden ? 'Показать панель' : 'Скрыть панель'" :aria-expanded="!panelHidden" aria-controls="panel"
+          @click="panelHidden = !panelHidden">
+          <component :is="panelHidden ? ChevronRight : ChevronLeft" class="size-4" aria-hidden="true" />
+        </button>
+      </UiTooltip>
 
       <div class="pointer-events-none absolute bottom-3 right-3 top-[72px] z-20 flex items-start gap-2 max-md:hidden">
         <div class="pointer-events-none flex h-full flex-col items-end gap-2">
@@ -111,7 +125,7 @@ watchEffect(() => {
       </div>
 
       <div class="pointer-events-none absolute bottom-3 z-20 flex justify-center max-md:hidden"
-        :style="{left: (panelW + 24) + 'px', right: (layersOpen || engine.picked.value ? 400 : 76) + 'px'}">
+        :style="{left: (panelHidden ? 24 : panelW + 24) + 'px', right: (layersOpen || engine.picked.value ? 400 : 76) + 'px'}">
         <div ref="playerEl" class="pointer-events-auto w-full max-w-[640px]"><PlayerBar /></div>
       </div>
 
@@ -122,7 +136,7 @@ watchEffect(() => {
       </Transition>
 
       <Transition enter-from-class="opacity-0 translate-y-2" leave-to-class="opacity-0" enter-active-class="transition duration-300" leave-active-class="transition duration-150">
-        <div v-if="app.view === 'data' && !narrow" class="pointer-events-none absolute inset-y-0 right-[76px] z-10 flex items-center justify-center" :style="{left: panelW + 24 + 'px'}">
+        <div v-if="app.view === 'data' && !narrow" class="pointer-events-none absolute inset-y-0 right-[76px] z-10 flex items-center justify-center" :style="{left: (panelHidden ? 0 : panelW + 24) + 'px'}">
           <WelcomeCard class="pointer-events-auto" @help="helpOpen = true" />
         </div>
       </Transition>
