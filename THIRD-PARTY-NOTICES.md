@@ -2,7 +2,8 @@
 
 ## Lucide icons
 
-The interface icons (`src/main/resources/static/icons.svg`) are taken from Lucide, https://lucide.dev.
+The interface icons (package `lucide-vue-next`; the previous interface: `frontend/public/classic/icons.svg`) are taken from
+Lucide, https://lucide.dev.
 
 ```
 ISC License
@@ -28,6 +29,13 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 `test-data/contest-osm*.geojson` contain data from OpenStreetMap, © OpenStreetMap contributors, available under
 the Open Database License (ODbL), https://www.openstreetmap.org/copyright.
 
+## Onest font
+
+The interface font Onest (package `@fontsource-variable/onest`) is used under the SIL Open Font License 1.1,
+https://openfontlicense.org.
+
 ## Libraries
 
-Java dependencies (`pom.xml`) and the map library MapLibre GL JS (webjar) are used under their own licenses.
+Java dependencies (`pom.xml`) and the interface libraries (`frontend/package.json`: Vue, Vue Router, Pinia, VueUse,
+Reka UI, Tailwind CSS — MIT; MapLibre GL JS — BSD-3-Clause) are used under their own licenses; the built interface
+in `src/main/resources/static/assets` contains them.

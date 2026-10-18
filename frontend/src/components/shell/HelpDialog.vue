@@ -36,6 +36,7 @@ const FLOW = [
           <div class="mb-1 font-semibold text-ink">Клавиши</div>
           Показ построения: <span class="kbd">Пробел</span> пуск и пауза, <span class="kbd">←</span> <span class="kbd">→</span> шаг.
           Рисование ограничения: <span class="kbd">Enter</span> готово, <span class="kbd">Backspace</span> убрать вершину, <span class="kbd">Esc</span> отмена.
+          Объект на карте: щелчок — карточка справа, <span class="kbd">Esc</span> — закрыть. Справка — <span class="kbd">?</span>.
         </div>
       </TabsContent>
       <TabsContent value="method" class="space-y-2.5 text-[13.5px] text-ink-2">

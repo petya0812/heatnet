@@ -78,7 +78,7 @@ watch([() => route.query.from as string | undefined, () => app.catalog], async (
   } catch (e: any) {
     toast(e.message, true);
   }
-  router.replace({query: {}});
+  router.replace({query: route.query.param ? {param: route.query.param} : {}});
 }, {immediate: true});
 
 const changed = (e: any) => e.editable && String(values.value[e.key]) !== String(e.default);

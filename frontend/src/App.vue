@@ -3,7 +3,9 @@ import {computed, onMounted, ref, watch, watchEffect} from 'vue';
 import {RouterView} from 'vue-router';
 import {TooltipProvider} from 'reka-ui';
 import {ChevronDown, ChevronUp} from 'lucide-vue-next';
-import {useBreakpoints, useElementSize} from '@vueuse/core';
+import {onKeyStroke, useBreakpoints, useElementSize} from '@vueuse/core';
+import {drawing} from '@/map/draw';
+import {dialogState} from '@/lib/dialogs';
 import {useApp} from '@/stores/app';
 import {installSync} from '@/sync';
 import {installTheme} from '@/lib/theme';
@@ -37,6 +39,11 @@ const wide = computed(() => app.view === 'data');
 
 installTheme();
 installSync();
+
+// Esc closes what lies over the map (the picked object), ? opens the help — not while typing or drawing
+const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement).closest('input, textarea, select, [contenteditable]');
+onKeyStroke('Escape', () => { if (!drawing.value && !dialogState.open && !helpOpen.value) engine.clearPicked(); });
+onKeyStroke('?', (e) => { if (!typing(e)) { e.preventDefault(); helpOpen.value = true; } });
 
 onMounted(() => {
   engine.createMap(mapEl.value!);
@@ -96,7 +103,7 @@ watchEffect(() => {
 
       <div class="pointer-events-none absolute bottom-3 right-3 top-[72px] z-20 flex items-start gap-2 max-md:hidden">
         <div class="pointer-events-none flex h-full flex-col items-end gap-2">
-          <LayersPanel v-if="layersOpen" class="pointer-events-auto" @close="layersOpen = false" />
+          <LayersPanel v-if="layersOpen" class="pointer-events-auto min-h-0 shrink" @close="layersOpen = false" />
           <div class="flex-1" />
           <Inspector class="pointer-events-auto" />
         </div>

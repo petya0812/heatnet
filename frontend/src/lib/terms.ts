@@ -44,3 +44,12 @@ export const HINTS: Record<string, string> = {
   NO_NETWORK: 'Рядом нет сети, связанной с источником — см. проверку данных.',
   CANCELLED: 'Расчёт был остановлен.',
 };
+
+/** Where a reason of an unconnected OKS can be dealt with: a setting of the calculation or the check of the data. */
+export const HINT_ACTIONS: Record<string, {param?: string; check?: boolean}> = {
+  ENTRY_BLOCKED: {param: 'building_entry'},
+  TIE_IN_IN_CLEARANCE: {param: 'tie_in_in_clearance'},
+  NO_ROUTE: {check: true},
+  NO_NETWORK: {check: true},
+  NO_CONNECTION_POINT: {check: true},
+};

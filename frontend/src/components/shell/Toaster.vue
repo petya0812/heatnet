@@ -4,8 +4,8 @@ import {dismiss, toasts} from '@/lib/toast';
 </script>
 
 <template>
-  <div class="pointer-events-none fixed bottom-4 left-1/2 z-[220] flex w-[min(440px,calc(100vw-24px))] -translate-x-1/2 flex-col items-center gap-2" aria-live="polite" role="status">
-    <TransitionGroup enter-from-class="opacity-0 translate-y-2" leave-to-class="opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+  <div class="pointer-events-none fixed right-[76px] top-[72px] z-[220] flex w-[min(400px,calc(100vw-24px))] flex-col items-end gap-2 max-md:left-1/2 max-md:right-auto max-md:top-auto max-md:bottom-4 max-md:-translate-x-1/2" aria-live="polite" role="status">
+    <TransitionGroup enter-from-class="opacity-0 -translate-y-2" leave-to-class="opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
       <div v-for="t in toasts" :key="t.id"
         class="pointer-events-auto flex w-full items-center gap-2.5 rounded-2xl bg-inverse py-2.5 pl-3.5 pr-2 text-[13.5px] text-on-inverse shadow-pop">
         <CircleAlert v-if="t.tone === 'bad'" class="size-[18px] shrink-0 text-inverse-bad" aria-hidden="true" />

@@ -9,8 +9,8 @@ import {ArrowRight, Check, CircleAlert, Clapperboard, Download, Ellipsis, GitCom
   Route, Ruler, Search, SlidersHorizontal, ShieldAlert, ShieldCheck, StickyNote, TriangleAlert, Trophy, Wrench, X, CircleDot, ListTree, Building2} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
-import {ago, count, fmt, isActive, metres, mln, natural, rub, splitName} from '@/lib/format';
-import {HINTS, SPECIAL_TITLES, TARGET_TITLES} from '@/lib/terms';
+import {ago, cap, count, fmt, isActive, metres, mln, natural, rub, splitName} from '@/lib/format';
+import {HINT_ACTIONS, HINTS, SPECIAL_TITLES, TARGET_TITLES} from '@/lib/terms';
 import {paramDiff} from '@/lib/catalog';
 import {COSTS, derive} from '@/lib/variant';
 import {toast} from '@/lib/toast';
@@ -130,6 +130,18 @@ const oksDetail = computed(() => {
   return {segs, recon, ev, alts, best, worst};
 });
 
+/** The features of the route of one OKS (or its outline when it has none). */
+function pathFeatures(id: string) {
+  const o = (v.value?.oks || []).find((x: any) => x.oks_id === id);
+  if (!o || !app.variantData) return null;
+  const ids = new Set(o.connected ? o.path_segment_ids.concat([o.tie_in_id]) : []);
+  return app.variantData.features.filter((f: any) => (f.properties.id && ids.has(f.properties.id))
+    || (!o.connected && f.properties.object_type === 'unconnected_oks' && f.properties.oks_id === id && f.geometry));
+}
+// a row of the list shows its route on the map while the pointer is over it; the map does not move
+const hoverOks = (id: string) => { const f = pathFeatures(id); if (f && f.length) highlight({type: 'FeatureCollection', features: f}, {fitTo: false}); };
+const unhoverOks = () => clearHighlight();
+
 function showPath(id: string) {
   const o = (v.value?.oks || []).find((x: any) => x.oks_id === id);
   if (!o || !app.variantData) return;
@@ -164,6 +176,16 @@ async function searchTrace(id: string) {
   }
 }
 
+/** The way from a reason to its remedy: the setting with the parameters of this run, or the check of the data. */
+const hintAction = computed(() => {
+  const a = oks.value && !oks.value.connected ? HINT_ACTIONS[oks.value.reason] : null;
+  if (!a) return null;
+  const entry = a.param && app.catalog ? app.catalog.params.find((p: any) => p.key === a.param && p.editable) : null;
+  if (entry) return {label: `Настройка «${entry.title}»`, go: () => router.push({name: 'calc', params: {ds: app.datasetId}, query: {from: app.runId, param: entry.key}})};
+  if (a.check) return {label: 'К проверке данных', go: () => router.push({name: 'check', params: {ds: app.datasetId}})};
+  return null;
+});
+
 const toExport = () => router.push({name: 'export', params: {ds: app.datasetId, run: app.runId, v: app.variantId}});
 const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId, a: `${app.runId}:${app.variantId}`}});
 </script>
@@ -181,7 +203,7 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
     <template v-else-if="!oks.connected">
       <div class="flex items-start gap-2.5 rounded-2xl bg-bad-soft p-3.5 text-[13.5px] text-bad">
         <CircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>{{ oks.reason_text }}{{ oks.detail ? ` (${oks.detail})` : '' }}</span>
+        <span>{{ cap(oks.reason_text) }}{{ oks.detail ? ` (${oks.detail})` : '' }}</span>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <UiStat label="Расход" :value="fmt(oks.flow_tph, 2)" unit="т/ч" />
@@ -189,7 +211,12 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
       </div>
       <div v-if="HINTS[oks.reason]" class="card flex items-start gap-2.5 p-3.5 text-[13px] text-ink-2">
         <Lightbulb class="mt-0.5 size-4 shrink-0 text-warn" aria-hidden="true" />
-        <span><b class="text-ink">Что можно сделать.</b> {{ HINTS[oks.reason] }}</span>
+        <div class="min-w-0">
+          <b class="text-ink">Что можно сделать.</b> {{ HINTS[oks.reason] }}
+          <div v-if="hintAction" class="mt-2">
+            <UiButton size="sm" variant="soft" :icon-right="ArrowRight" @click="hintAction.go()">{{ hintAction.label }}</UiButton>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -397,13 +424,14 @@ const toCompare = () => router.push({name: 'compare', params: {ds: app.datasetId
         </div>
         <ul class="px-2 pb-2">
           <li v-for="o in oksShown" :key="o.oks_id">
-            <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-2" @click="goOks(o.oks_id)">
+            <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-2" @click="goOks(o.oks_id)"
+              @mouseenter="hoverOks(o.oks_id)" @mouseleave="unhoverOks" @focus="hoverOks(o.oks_id)" @blur="unhoverOks">
               <span class="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold" :class="o.connected ? 'bg-surface-3 text-ink' : 'bg-bad-soft text-bad'">{{ o.oks_id }}</span>
               <span class="min-w-0 flex-1">
                 <span v-if="o.connected" class="flex items-center gap-1 truncate text-[13px] text-ink">
                   <component :is="o.joins === 'tie_in' ? Merge : CircleDot" class="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />{{ joinsText(o) }}
                 </span>
-                <span v-else class="block truncate text-[13px] text-bad">{{ o.reason_text || 'без трассы' }}</span>
+                <span v-else class="block truncate text-[13px] text-bad">{{ cap(o.reason_text) || 'Без трассы' }}</span>
                 <span class="num block text-xs text-ink-3">{{ fmt(o.flow_tph, 1) }} т/ч<template v-if="o.connected"> · ДУ {{ o.diameter }} · ветка {{ fmt(o.own_length, 0) }} м · {{ fmt(o.own_cost / 1e6, 1) }} млн ₽</template></span>
               </span>
               <ArrowRight class="size-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true" />

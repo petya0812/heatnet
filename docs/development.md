@@ -4,7 +4,7 @@
 
 ## Команды
 
-Нужны JDK 11 и Maven 3.8+; для сквозных проверок — запущенный сервис (`docker-compose up -d --build`).
+Нужны JDK 11 и Maven 3.8+, для правки интерфейса — Node 20+; для сквозных проверок — запущенный сервис (`docker-compose up -d --build`).
 
 ```bash
 mvn verify                                    # сборка и все тесты без БД
@@ -13,7 +13,9 @@ mvn test -Dtest=BenchRun -Dbench=contest-lct.geojson,random-42.geojson -Dreasons
 mvn test -Dtest=BenchRun -Dbench=contest-lct.geojson -DturnStep=90                   # то же с другими углами поворота
 mvn test -Dtest=ParamCatalogTest -DupdateDocs=true   # пересобрать docs/parameters.md из каталога параметров
 python3 tools/check_docs.py                   # ссылки, пути и имена классов в документации
-python3 tools/check_js.py && python3 tools/check_tokens.py   # синтаксис и оформление интерфейса
+npm --prefix frontend run dev                # интерфейс с горячей перезагрузкой, API — сервис на :8080
+npm --prefix frontend run build              # сборка интерфейса в src/main/resources/static (коммитится)
+python3 tools/check_js.py && python3 tools/check_tokens.py   # типы и оформление интерфейса
 tools/e2e.sh test-data/contest-lct.geojson    # загрузка → расчёт → выгрузка → проверка через API
 python3 tools/seed_datasets.py [--reset] [--all]   # демонстрационные наборы в работающем сервисе
 python3 tools/api_examples.py                 # пересобрать openapi/examples.json с работающего сервиса
@@ -73,6 +75,7 @@ docker run --rm --network heatnet_default -v "$PWD":/w -v ~/.m2:/root/.m2 -w /w 
   `turn_penalty`) только ужесточают правила; `OutputValidator` проверяет минимумы технического приложения
   (`EngineerPreferencesTest`). Новый параметр — поле `RunParams`, поле `PlanParams`, запись в `ParamCatalog`
   (интерфейс, сравнение и отчёт подхватывают её сами), `ParamCatalogTest -DupdateDocs=true`.
-- `src/main/resources/static` — интерфейс: четыре шага (данные → проверка → расчёт → результат с вкладками
-  сравнения и выгрузки), ES-модули без сборки, MapLibre из webjar, знаки — `icons.svg`; устройство — [ui.md](ui.md).
+- `frontend/` — интерфейс: четыре шага (данные → проверка → расчёт → результат с вкладками сравнения и выгрузки),
+  Vue 3 + Tailwind CSS + Reka UI, MapLibre; собранная статика — в `src/main/resources/static`, прежний интерфейс —
+  `/classic/`; устройство — [ui.md](ui.md).
   Имя набора «Группа · Название» (см. `tools/seed_datasets.py`) раскладывает наборы по группам на первом экране.

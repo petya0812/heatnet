@@ -78,3 +78,6 @@ export const GROUPS = [
   {key: 'Пример', title: 'Примеры'},
   {key: 'Нагрузка', title: 'Большие наборы'},
 ];
+
+/** A sentence from the server may start in lower case: «выход закрыт» → «Выход закрыт». */
+export const cap = (t: string | null | undefined) => (t ? t[0].toUpperCase() + t.slice(1) : '');
