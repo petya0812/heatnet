@@ -131,7 +131,7 @@ class OutputValidatorTest {
         }
         final org.locationtech.jts.geom.Coordinate inside = c;
         assertRule(check(fs -> {
-            ObjectNode seg = first(fs, "heat_network", "end_node_id", "oks-1-cp");
+            ObjectNode seg = first(fs, "heat_network", "end_node_id", "oks-1");
             ArrayNode coords = (ArrayNode) seg.get("geometry").get("coordinates");
             ArrayNode mid = MAPPER.createArrayNode();
             mid.add(inside.x);

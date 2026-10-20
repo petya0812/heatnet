@@ -105,6 +105,12 @@ class Builder:
         self.add(polygon(outer), id=fid, object_type="oks_future", flow_tph=flow, heat_load=round(flow / 16.0, 4))
         self.add(point(*cp), id=fid + "-cp", object_type="oks_connection_point", oks_id=fid)
 
+    def oks_current(self, fid, outer, flow, cp):
+        """Current input format (technical appendix 1): the outline is a restriction of type oks — an obstacle with
+        a clearance — and the connection point inside it carries the flow."""
+        self.add(polygon(outer), id=fid + "-bld", object_type="restriction", restriction_type="oks")
+        self.add(point(*cp), id=fid, object_type="oks_connection_point", flow_tph=flow)
+
     def building(self, fid, outer):
         self.add(polygon(outer), id=fid, object_type="oks_existing")
 
@@ -129,6 +135,7 @@ def small():
       oks-5  enclosed by water -> no route (unconnected, asserted);
       oks-6  far from the network with a small flow -> the length limit forces a larger DN;
       metro-1 unknown restriction type -> diagnostics warning (asserted).
+    Connection points lie 4 m inside their buildings, off the nearest wall.
     """
     b = Builder()
     b.source("src", 0, 0)
@@ -156,12 +163,12 @@ def small():
     b.building("bld-2", rect(135, 70, 175, 100))
     b.building("bld-3", rect(300, 100, 340, 140))
 
-    b.oks("oks-1", rect(100, 120, 140, 160), 10.0, (120, 120))
-    b.oks("oks-2", rect(480, 200, 530, 240), 30.0, (480, 220))
-    b.oks("oks-3", rect(180, -120, 230, -80), 5.0, (205, -80))
-    b.oks("oks-4", rect(560, -60, 610, -30), 160.0, (596, -30))
-    b.oks("oks-5", rect(705, 205, 735, 235), 8.0, (720, 205))
-    b.oks("oks-6", rect(-60, 250, -20, 290), 2.0, (-40, 250))
+    b.oks_current("oks-1", rect(100, 120, 140, 160), 10.0, (120, 124))
+    b.oks_current("oks-2", rect(480, 200, 530, 240), 30.0, (484, 220))
+    b.oks_current("oks-3", rect(180, -120, 230, -80), 5.0, (205, -84))
+    b.oks_current("oks-4", rect(560, -60, 610, -30), 160.0, (596, -34))
+    b.oks_current("oks-5", rect(705, 205, 735, 235), 8.0, (720, 209))
+    b.oks_current("oks-6", rect(-60, 250, -20, 290), 2.0, (-40, 254))
     return b
 
 

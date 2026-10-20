@@ -86,6 +86,6 @@
 |---|---|
 | **По умолчанию** (`default`)<br>по техническим требованиям | все по умолчанию |
 | **Рекомендуем** (`recommended`)<br>ровные трассы, лучше схема | `turn_angles` = 90<br>`building_entry` = NEAR<br>`entry_slack_m` = 10<br>`group_rebuild` = true<br>`shape_weight` = 1 |
-| **Подключить максимум** (`max_connect`)<br>мягкие правила, больше подключений | `through_buildings` = ANY<br>`building_crossing_k` = 2<br>`through_own_parts` = true<br>`building_entry` = NEAR<br>`entry_slack_m` = 30<br>`turn_angles` = ANY<br>`tie_in_in_clearance` = true |
+| **Подключить максимум** (`max_connect`)<br>мягкие правила, больше подключений | `through_buildings` = ANY<br>`building_crossing_k` = 2<br>`through_own_parts` = true<br>`building_entry` = NEAR<br>`entry_slack_m` = 30<br>`tie_in_in_clearance` = true |
 | **Автоулучшение** (`auto_improve`)<br>дольше, проще схема; переключатель рядом с наборами, выключен — `group_rebuild` = false | `group_rebuild` = true<br>`shape_weight` = 1 |
 

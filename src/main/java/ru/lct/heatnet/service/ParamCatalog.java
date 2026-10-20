@@ -122,7 +122,6 @@ public class ParamCatalog {
         max.put("through_own_parts", true);
         max.put("building_entry", "NEAR");
         max.put("entry_slack_m", 30);
-        max.put("turn_angles", "ANY");
         max.put("tie_in_in_clearance", true);
         out.add(preset("max_connect", "Подключить максимум", "мягкие правила, больше подключений", max));
         return out;

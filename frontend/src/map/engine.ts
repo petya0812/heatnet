@@ -379,8 +379,10 @@ function highlightNow(geojson: Any, {fitTo = true, maxZoom = 17} = {}) {
   if (!map.getLayer('hl-line')) {
     // a halo under the objects of the variant: highlighted things keep their own colours
     const c = palette.halo;
-    addLayerNow({id: 'hl-fill', type: 'fill', source: 'hl', filter: ['==', ['geometry-type'], 'Polygon'], paint: {'fill-color': c, 'fill-opacity': 0.22}});
-    addLayerNow({id: 'hl-line', type: 'line', source: 'hl', layout: {'line-cap': 'round', 'line-join': 'round'},
+    // a building or an area: a thin dashed outline, no halo (wide translucent strokes overlap at the corners)
+    addLayerNow({id: 'hl-outline', type: 'line', source: 'hl', filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {'line-color': c, 'line-width': 2, 'line-dasharray': [2, 1.5]}});
+    addLayerNow({id: 'hl-line', type: 'line', source: 'hl', filter: ['!=', ['geometry-type'], 'Polygon'], layout: {'line-cap': 'round', 'line-join': 'round'},
       paint: {'line-color': c, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 22, 19, 36], 'line-opacity': 0.4, 'line-blur': 2}},
     map.getLayer('res-short') ? 'res-short' : undefined);
     addLayerNow({id: 'hl-point', type: 'circle', source: 'hl', filter: ['==', ['geometry-type'], 'Point'],
@@ -549,7 +551,7 @@ function applyThemeNow() {
   for (const l of ['res-seg', 'res-seg-new']) set(l, 'line-color', dnColor());
   set('res-tech', 'circle-color', p.casing);
   set('hl-line', 'line-color', p.halo);
-  set('hl-fill', 'fill-color', p.halo);
+  set('hl-outline', 'line-color', p.halo);
   set('hl-point', 'circle-stroke-color', p.halo);
   if (groups['in-network']) groups['in-network'].sw = p.network;
   if (groups['in-buildings']) groups['in-buildings'].sw = p.building;

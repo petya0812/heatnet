@@ -171,7 +171,7 @@ class ApiIntegrationTest {
         String raw13 = tileText(small, 13, t13);
         assertTrue(raw13.contains("network") && raw13.contains("oks"), "z13 tile has the network and OKS layers");
         assertFalse(raw13.contains("buildings"), "buildings only from z14");
-        JsonNode cp = get("/api/datasets/" + small + "/features/oks-1-cp").get("features").get(0).get("geometry");
+        JsonNode cp = get("/api/datasets/" + small + "/features/oks-1").get("features").get(0).get("geometry");
         int[] t15 = tileOf(cp.get("coordinates").get(0).asDouble(), cp.get("coordinates").get(1).asDouble(), 15);
         assertTrue(tileText(small, 15, t15).contains("connection_points"), "z15 tile has the connection point");
         byte[] low = rest.getForEntity("/api/datasets/" + small + "/tiles/5/1/1.mvt", byte[].class).getBody();
@@ -538,7 +538,7 @@ class ApiIntegrationTest {
         assertEquals("k3", segment.get("upstream_object_id").asText(), "the other attributes are kept");
         assertEquals(150, get("/api/datasets/" + parent + "/features/m4").get("features").get(0)
                 .get("properties").get("diameter").asInt(), "the parent keeps its value");
-        assertEquals(12.5, get("/api/datasets/" + version + "/features/oks-1-cp").get("features").get(0)
+        assertEquals(12.5, get("/api/datasets/" + version + "/features/oks-1").get("features").get(0)
                 .get("properties").get("flow_tph").asDouble());
 
         JsonNode o = get("/api/datasets/" + version + "/overview");
