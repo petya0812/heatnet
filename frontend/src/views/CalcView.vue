@@ -5,7 +5,7 @@
 
 import {computed, nextTick, onMounted, reactive, ref, watch} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
-import {ArrowRight, BookOpen, CircleAlert, Clapperboard, Ellipsis, History, Info, Lock, Pencil, Pin, PinOff, Play, RotateCcw, Route, ShieldCheck,
+import {ArrowRight, CircleAlert, Clapperboard, Ellipsis, History, Lock, Pencil, Pin, PinOff, Play, RotateCcw, Route,
   SlidersHorizontal, StickyNote, Trash2, X, LoaderCircle, Check, Database, CircleCheck, Building2, ChevronDown} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
 import {api} from '@/api/client';
@@ -21,13 +21,11 @@ import UiButton from '@/components/ui/UiButton.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 import UiSection from '@/components/ui/UiSection.vue';
 import UiSegmented from '@/components/ui/UiSegmented.vue';
-import UiSlider from '@/components/ui/UiSlider.vue';
 import UiProgress from '@/components/ui/UiProgress.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import UiMenu from '@/components/ui/UiMenu.vue';
 import UiIconButton from '@/components/ui/UiIconButton.vue';
-import UiTooltip from '@/components/ui/UiTooltip.vue';
-import UiChoice from '@/components/ui/UiChoice.vue';
+import ParamField from '@/components/calc/ParamField.vue';
 
 const app = useApp();
 const route = useRoute();
@@ -42,8 +40,6 @@ const GROUPS = [
 const FIXED_TITLES: Record<string, string> = {
   norm: 'Технические требования', interpretation: 'Решения сервиса', data_assumption: 'Восполнение данных', algorithm: 'Поиск трассы',
 };
-/** Keys with a slider next to the number: the range is the range of the catalogue. */
-const SLIDERS = new Set(['turn_penalty', 'odd_joint_turns', 'shape_weight', 'extra_clearance_m', 'min_crossing_angle_deg', 'existing_flow_share', 'entry_slack_m', 'entry_leg_m']);
 
 const tab = computed({
   get: () => (route.query.tab === 'history' ? 'history' : 'new'),
@@ -83,7 +79,24 @@ watch([() => route.query.from as string | undefined, () => app.catalog], async (
 
 const changed = (e: any) => e.editable && String(values.value[e.key]) !== String(e.default);
 const nChanged = computed(() => editable.value.filter(changed).length);
-const groups = computed(() => GROUPS.map((g) => ({...g, items: editable.value.filter((e) => e.class === g.cls)})).filter((g) => g.items.length));
+/** A group is a list of rows; a setting that depends on another one of the same group sits inside the row of that one. */
+const groups = computed(() => GROUPS.map((g) => {
+  const items = editable.value.filter((e) => e.class === g.cls);
+  const keys = new Set(items.map((e) => e.key));
+  const rows = items.filter((e) => !(e.depends_on && keys.has(e.depends_on.key)))
+    .map((e) => ({e, children: items.filter((c) => c.depends_on && c.depends_on.key === e.key)}));
+  return {...g, items, rows};
+}).filter((g) => g.items.length));
+
+/** A dependent setting whose parent is in another group says when it applies: «Действует, когда «Ввод в здание» — …». */
+function conditionOf(e: any) {
+  const d = e.depends_on;
+  if (!d) return undefined;
+  const parent = editable.value.find((x) => x.key === d.key);
+  const label = (v: unknown) => (parent ? paramLabel(parent, v) : String(v));
+  const name = parent ? parent.title : d.key;
+  return d.not != null ? `Действует, когда «${name}» — не «${label(d.not)}»` : `Действует, когда «${name}» — «${label(d.value)}»`;
+}
 const fixed = computed(() => {
   const by: Record<string, any[]> = {};
   for (const e of entries.value.filter((x) => !x.editable)) (by[e.class] ||= []).push(e);
@@ -91,29 +104,24 @@ const fixed = computed(() => {
 });
 const fixedCount = computed(() => entries.value.filter((x) => !x.editable).length);
 
-const optionsOf = (e: any) => (e.options || []).map((x: any) => ({value: x.value, label: x.label, hint: x.effect}));
 /** Folded groups (a per-viewer convenience); a folded group shows its current values in one line. */
 const folded = reactive<Record<string, boolean>>(prefs.get('calcFolded', {}));
 watch(folded, () => prefs.set('calcFolded', {...folded}));
 const summaryOf = (items: any[]) => items.filter((e) => paramVisible(e, values.value)).slice(0, 3)
   .map((e) => `${e.title}: ${paramLabel(e, values.value[e.key])}`).join(' · ');
-
-/** Options with their own effect read better as cards: the effect of each is seen before choosing. */
-const asCards = (e: any) => (e.options || []).length > 2 || (e.options || []).some((x: any) => x.label.length > 18);
-const effectOf = (e: any) => ((e.options || []).find((x: any) => String(values.value[e.key]) === x.value) || {}).effect;
-const setOption = (e: any, raw: string) => { values.value[e.key] = e.type === 'boolean' ? raw === 'true' : raw; };
-const isPct = (e: any) => e.unit === 'доля';
-const numRange = (e: any) => (isPct(e) ? {min: 0, max: 100, step: 5} : {min: e.min, max: e.max, step: e.step});
-const shown = (e: any) => (isPct(e) ? Math.round(Number(values.value[e.key]) * 100) : Number(values.value[e.key]));
-function setNumber(e: any, raw: unknown) {
-  const s = String(raw).replace(',', '.').trim();
-  if (s === '' || Number.isNaN(Number(s))) return; // an empty field does not turn into 0
-  let v = Number(s);
-  const r = numRange(e);
-  v = Math.min(r.max, Math.max(r.min, v));
-  values.value[e.key] = isPct(e) ? v / 100 : v;
+/** Folding from the header that stays on top while scrolling: the folded group comes back into view. */
+async function toggle(cls: string, ev: Event) {
+  folded[cls] = !folded[cls];
+  const section = (ev.currentTarget as HTMLElement).closest('section');
+  await nextTick();
+  // the scroll of the panel body only: scrollIntoView would also move the panel itself inside the page
+  const body = section?.closest('.overflow-y-auto');
+  if (section && body) {
+    const above = section.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    if (above < 0) body.scrollTop += above - 8;
+  }
 }
-const reset = (e: any) => { values.value[e.key] = e.default; };
+
 const resetAll = () => { values.value = defaults(); };
 
 // ------------------------------------------------------------------ name, start
@@ -257,15 +265,11 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
         </template>
         <UiBadge v-else tone="neutral">по умолчанию</UiBadge>
       </div>
-      <p class="-mt-1 flex items-start gap-1.5 px-1 text-[12.5px] text-ink-3">
-        <ShieldCheck class="mt-px size-3.5 shrink-0 text-ok" aria-hidden="true" />
-        Любые значения только ужесточают правила — результат всегда проходит проверку по техническим требованиям.
-      </p>
 
-      <!-- editable groups -->
-      <section v-for="g in groups" :key="g.cls" class="card" :aria-labelledby="'g-' + g.cls">
-        <button type="button" class="flex w-full items-start gap-2.5 rounded-[16px] px-4 pb-2.5 pt-3.5 text-left hover:bg-surface-2" :aria-expanded="!folded[g.cls]"
-          @click="folded[g.cls] = !folded[g.cls]">
+      <!-- editable groups: one frame per group; its header stays on top while the group is scrolled -->
+      <section v-for="g in groups" :key="g.cls" class="card overflow-clip" :aria-labelledby="'g-' + g.cls">
+        <button type="button" class="sticky -top-1 z-[2] flex w-full items-start gap-2.5 bg-surface-solid px-4 pb-2.5 pt-3.5 text-left transition-colors hover:bg-surface-2"
+          :class="folded[g.cls] ? '' : 'shadow-[0_1px_0_var(--line)]'" :aria-expanded="!folded[g.cls]" @click="toggle(g.cls, $event)">
           <component :is="g.icon" class="mt-0.5 size-[18px] shrink-0 text-accent" aria-hidden="true" />
           <span class="min-w-0 flex-1">
             <h3 :id="'g-' + g.cls" class="text-[14px] font-semibold">{{ g.title }}</h3>
@@ -274,42 +278,18 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
           <span v-if="g.items.filter(changed).length" class="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent-ink"><span class="size-1.5 rounded-full bg-accent" aria-hidden="true" />изменено {{ g.items.filter(changed).length }}</span>
           <ChevronDown class="mt-0.5 size-4 shrink-0 text-ink-4 transition-transform" :class="folded[g.cls] ? '' : 'rotate-180'" aria-hidden="true" />
         </button>
-        <div v-show="!folded[g.cls]" class="px-2 pb-2">
-          <template v-for="e in g.items" :key="e.key">
-            <div v-if="paramVisible(e, values)" :id="'param-' + e.key"
-              class="relative rounded-xl px-2 py-2.5 transition-colors duration-500"
-              :class="[flash === e.key ? 'bg-accent-soft' : '', changed(e) ? 'bg-[color-mix(in_srgb,var(--accent-soft),transparent_45%)]' : '', e.depends_on ? 'ml-4 border-l-2 border-line-strong !rounded-l-none pl-3' : '']">
-              <div class="flex items-start gap-2">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5 text-[13.5px] font-medium text-ink">
-                    {{ e.title }}
-                    <UiTooltip :content="e.description + (e.source ? ` · ${e.source}` : '')">
-                      <button type="button" class="text-ink-4 hover:text-ink-2" :aria-label="'Что это: ' + e.title"><Info class="size-3.5" aria-hidden="true" /></button>
-                    </UiTooltip>
-                  </div>
-                </div>
-                <UiTooltip v-if="changed(e)" content="Вернуть значение по умолчанию">
-                  <button type="button" class="-my-1 inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-accent-ink hover:bg-accent-soft" @click="reset(e)">
-                    <RotateCcw class="size-3" aria-hidden="true" />Сбросить
-                  </button>
-                </UiTooltip>
-              </div>
-              <div class="mt-2">
-                <UiChoice v-if="(e.type === 'enum' || e.type === 'boolean') && asCards(e)" :model-value="String(values[e.key])" :options="optionsOf(e)" :label="e.title"
-                  :cols="1" @update:model-value="setOption(e, $event)" />
-                <UiSegmented v-else-if="e.type === 'enum' || e.type === 'boolean'" :model-value="String(values[e.key])" :options="optionsOf(e)" :label="e.title" size="sm"
-                  @update:model-value="setOption(e, $event)" />
-                <div v-else-if="e.type === 'number'" class="flex items-center gap-3">
-                  <UiSlider v-if="SLIDERS.has(e.key)" class="flex-1" :model-value="shown(e)" v-bind="numRange(e)" :label="e.title" @update:model-value="setNumber(e, $event)" />
-                  <label class="flex h-8 shrink-0 items-center overflow-hidden rounded-[10px] border border-line-strong bg-surface-solid focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]">
-                    <input type="number" class="num h-full w-16 bg-transparent px-2 text-right text-[13px] outline-none" :value="shown(e)" v-bind="numRange(e)" :aria-label="e.title"
-                      @change="setNumber(e, ($event.target as HTMLInputElement).value); ($event.target as HTMLInputElement).value = String(shown(e))" />
-                    <span class="pr-2 text-xs text-ink-3">{{ isPct(e) ? '%' : e.unit }}</span>
-                  </label>
-                </div>
-              </div>
-              <p v-if="effectOf(e) && !asCards(e)" class="mt-1.5 text-xs leading-snug text-ink-2">{{ effectOf(e) }}</p>
-              <p v-if="e.source" class="mt-1 text-[11px] text-ink-3">{{ e.source }}</p>
+        <div v-show="!folded[g.cls]" class="divide-y divide-line">
+          <template v-for="row in g.rows" :key="row.e.key">
+            <div v-if="paramVisible(row.e, values)" :id="'param-' + row.e.key" class="px-4 py-3.5 transition-colors duration-500" :class="flash === row.e.key ? 'bg-accent-soft' : ''">
+              <ParamField :e="row.e" :condition="conditionOf(row.e)">
+                <template v-if="row.children.some((c) => paramVisible(c, values))" #default>
+                  <template v-for="c in row.children" :key="c.key">
+                    <div v-if="paramVisible(c, values)" :id="'param-' + c.key" class="-mx-1.5 rounded-lg px-1.5 py-1 transition-colors duration-500" :class="flash === c.key ? 'bg-surface-solid' : ''">
+                      <ParamField :e="c" />
+                    </div>
+                  </template>
+                </template>
+              </ParamField>
             </div>
           </template>
         </div>

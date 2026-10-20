@@ -23,9 +23,10 @@ const TONE = {neutral: 'text-ink-3', ok: 'text-ok', warn: 'text-warn', bad: 'tex
 </script>
 
 <template>
-  <CollapsibleRoot v-model:open="isOpen" :disabled="!collapsible" class="card overflow-hidden">
+  <!-- overflow-clip, not hidden: the frame keeps its rounded corners and the header can stay on top while scrolling -->
+  <CollapsibleRoot v-model:open="isOpen" :disabled="!collapsible" class="card overflow-clip">
     <CollapsibleTrigger
-      class="group flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors"
+      class="group sticky -top-1 z-[2] flex w-full items-center gap-2.5 bg-surface-solid px-4 py-3 text-left transition-colors data-[state=open]:shadow-[0_1px_0_var(--line)]"
       :class="collapsible ? 'hover:bg-surface-2' : 'cursor-default'">
       <component :is="icon" v-if="icon" class="size-[18px] shrink-0" :class="TONE[tone]" aria-hidden="true" />
       <span class="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{{ title }}</span>
@@ -33,7 +34,7 @@ const TONE = {neutral: 'text-ink-3', ok: 'text-ok', warn: 'text-warn', bad: 'tex
       <ChevronDown v-if="collapsible" class="size-4 shrink-0 text-ink-4 transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden="true" />
     </CollapsibleTrigger>
     <CollapsibleContent class="overflow-hidden data-[state=closed]:animate-[collapse_.18s_ease-out] data-[state=open]:animate-[expand_.2s_ease-out]">
-      <div :class="flush ? 'pb-1' : 'px-4 pb-4'"><slot /></div>
+      <div :class="flush ? 'pb-1' : 'px-4 pb-4 pt-3'"><slot /></div>
     </CollapsibleContent>
   </CollapsibleRoot>
 </template>

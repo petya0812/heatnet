@@ -1,19 +1,17 @@
 <script setup lang="ts">
-import {computed} from 'vue';
 import {RouterLink} from 'vue-router';
-import {CircleHelp, Code, LoaderCircle, WifiOff} from 'lucide-vue-next';
+import {CircleHelp, Code, WifiOff} from 'lucide-vue-next';
 import {useApp} from '@/stores/app';
-import {fmt} from '@/lib/format';
 import StepNav from './StepNav.vue';
 import DatasetSwitcher from './DatasetSwitcher.vue';
 import DisplaySettings from './DisplaySettings.vue';
+import RunsIndicator from './RunsIndicator.vue';
 import UiIconButton from '@/components/ui/UiIconButton.vue';
 import UiTooltip from '@/components/ui/UiTooltip.vue';
 import BrandMark from './BrandMark.vue';
 
 defineEmits<{help: []}>();
 const app = useApp();
-const busy = computed(() => app.server.running + app.server.queued);
 </script>
 
 <template>
@@ -40,11 +38,7 @@ const busy = computed(() => app.server.running + app.server.queued);
       <UiTooltip v-if="app.server.offline" content="Нет связи с сервером — данные не обновляются" side="bottom">
         <span class="flex h-9 items-center gap-1.5 rounded-full bg-bad-soft px-3 text-[13px] font-medium text-bad" role="status"><WifiOff class="size-4" aria-hidden="true" />Нет связи</span>
       </UiTooltip>
-      <UiTooltip v-else-if="busy" :content="`Сейчас считается: ${fmt(app.server.running)}, в очереди: ${fmt(app.server.queued)}`" side="bottom">
-        <span class="flex h-9 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-[13px] font-medium text-accent-ink" role="status">
-          <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />{{ busy }}
-        </span>
-      </UiTooltip>
+      <RunsIndicator v-else />
       <DisplaySettings />
       <UiIconButton :icon="CircleHelp" label="Справка: порядок работы, метод, термины" side="bottom" class="rounded-full" @click="$emit('help')" />
       <UiTooltip content="Описание API (Swagger UI), откроется в новой вкладке" side="bottom">
