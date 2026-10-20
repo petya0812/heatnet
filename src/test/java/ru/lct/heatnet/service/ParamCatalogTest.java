@@ -76,9 +76,50 @@ class ParamCatalogTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void presetsUseKnownParametersWithValidValues() throws Exception {
+        Map<String, Map<String, Object>> byKey = new java.util.HashMap<>();
+        for (Map<String, Object> e : catalog.entries()) {
+            byKey.put((String) e.get("key"), e);
+        }
+        ObjectMapper om = new ObjectMapper();
+        List<Map<String, Object>> sets = new java.util.ArrayList<>();
+        Set<String> presetKeys = new HashSet<>();
+        for (Map<String, Object> p : ParamCatalog.presets()) {
+            assertTrue(presetKeys.add((String) p.get("key")), "unique preset " + p.get("key"));
+            for (String f : new String[]{"title", "description"}) {
+                assertFalse(String.valueOf(p.get(f)).trim().isEmpty(), p.get("key") + "." + f);
+            }
+            sets.add((Map<String, Object>) p.get("values"));
+        }
+        assertTrue(presetKeys.contains("default") && presetKeys.contains("recommended") && presetKeys.contains("max_connect"));
+        Map<String, Object> auto = ParamCatalog.autoImprove();
+        sets.add((Map<String, Object>) auto.get("on"));
+        sets.add((Map<String, Object>) auto.get("off"));
+        assertEquals(true, ((Map<String, Object>) auto.get("on")).get("group_rebuild"));
+        for (Map<String, Object> values : sets) {
+            for (Map.Entry<String, Object> v : values.entrySet()) {
+                Map<String, Object> e = byKey.get(v.getKey());
+                assertNotNull(e, "known parameter " + v.getKey());
+                assertEquals(Boolean.TRUE, e.get("editable"), "editable " + v.getKey());
+                if (e.get("options") != null) {
+                    boolean known = false;
+                    for (Map<String, Object> o : (List<Map<String, Object>>) e.get("options")) {
+                        known |= String.valueOf(v.getValue()).equals(o.get("value"));
+                    }
+                    assertTrue(known, v.getKey() + " = " + v.getValue());
+                }
+            }
+            // the same values as a request of a calculation are accepted
+            RunParams rp = om.readValue(om.writeValueAsString(values), RunParams.class);
+            assertNotNull(rp.apply(new PlanParams()));
+        }
+    }
+
+    @Test
     void catalogSerializes() throws Exception {
         String json = new ObjectMapper().writeValueAsString(catalog.catalog());
-        assertTrue(json.contains("\"classes\"") && json.contains("\"restriction_types\""));
+        assertTrue(json.contains("\"classes\"") && json.contains("\"restriction_types\"") && json.contains("\"presets\""));
     }
 
     @Test

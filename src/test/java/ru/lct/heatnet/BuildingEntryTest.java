@@ -253,7 +253,10 @@ class BuildingEntryTest {
         // bend of 45° it makes there
         double[][] neighbour = {{30, -30}, {90, -30}, {90, -10}, {30, -10}, {30, -30}};
         String data = withBuilding(pipeDataset(new double[][]{{150, -33}, {35, -33}}), "b3", neighbour);
-        Result strict = plan(data, new PlanParams());
+        // the route goes round the far side of the neighbour, the edge of the data: the boundary would close it
+        PlanParams noBoundary = new PlanParams();
+        noBoundary.dataBoundaryM = 0;
+        Result strict = plan(data, noBoundary);
         Variant v = strict.variants.get(0);
         assertTrue(v.unconnected.isEmpty(), v.unconnected.toString());
         assertEquals(Collections.emptyList(), strict.report.errors());
@@ -262,6 +265,7 @@ class BuildingEntryTest {
 
         PlanParams allowed = new PlanParams();
         allowed.rules.tieInInClearance = true;
+        allowed.dataBoundaryM = 0;
         Result within = plan(data, allowed);
         Variant w = within.variants.get(0);
         assertTrue(distanceTo(neighbour, tieOf(w)) < clearance(w), "the tie-in at the end of the pipe: "

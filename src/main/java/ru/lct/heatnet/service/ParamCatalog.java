@@ -96,6 +96,63 @@ public class ParamCatalog {
         m.put("classes", classes);
         m.put("params", entries);
         m.put("restriction_types", restrictionTypes(ref));
+        m.put("presets", presets());
+        m.put("auto_improve", autoImprove());
+        return m;
+    }
+
+    // ------------------------------------------------------------------ presets
+
+    /**
+     * Ready sets of settings: request fields of a calculation; a field not named keeps its default. Values that match
+     * no preset are «Свой» in the UI — it is not a set of values and is not listed here.
+     */
+    public static List<Map<String, Object>> presets() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        out.add(preset("default", "По умолчанию", "по техническим требованиям", new LinkedHashMap<>()));
+        Map<String, Object> rec = new LinkedHashMap<>();
+        rec.put("turn_angles", "90");
+        rec.put("building_entry", "NEAR");
+        rec.put("entry_slack_m", 10);
+        rec.putAll(autoImproveOn());
+        out.add(preset("recommended", "Рекомендуем", "ровные трассы, лучше схема", rec));
+        Map<String, Object> max = new LinkedHashMap<>();
+        max.put("through_buildings", "ANY");
+        max.put("building_crossing_k", 2);
+        max.put("through_own_parts", true);
+        max.put("building_entry", "NEAR");
+        max.put("entry_slack_m", 30);
+        max.put("turn_angles", "ANY");
+        max.put("tie_in_in_clearance", true);
+        out.add(preset("max_connect", "Подключить максимум", "мягкие правила, больше подключений", max));
+        return out;
+    }
+
+    /** «Автоулучшение»: a switch next to the presets; on when {@code group_rebuild} is on. */
+    public static Map<String, Object> autoImprove() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("title", "Автоулучшение");
+        m.put("description", "дольше, проще схема");
+        m.put("on", autoImproveOn());
+        Map<String, Object> off = new LinkedHashMap<>();
+        off.put("group_rebuild", false);
+        m.put("off", off);
+        return m;
+    }
+
+    private static Map<String, Object> autoImproveOn() {
+        Map<String, Object> on = new LinkedHashMap<>();
+        on.put("group_rebuild", true);
+        on.put("shape_weight", 1);
+        return on;
+    }
+
+    private static Map<String, Object> preset(String key, String title, String description, Map<String, Object> values) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("key", key);
+        m.put("title", title);
+        m.put("description", description);
+        m.put("values", values);
         return m;
     }
 
@@ -398,6 +455,13 @@ public class ParamCatalog {
                 .basis("разъяснение 9")
                 .codes("restriction.unknown_type"));
 
+        out.add(number("data_boundary_m", DATA_ASSUMPTION, "Граница данных",
+                "За пределами набора зданий и препятствий данных нет: пустое место там не значит свободное. Трасса "
+                        + "не уходит дальше этого расстояния от крайних объектов набора (проезды и дворы между ними — "
+                        + "внутри) и не обходит крайние здания снаружи. Вокруг подключаемых зданий запас больше — "
+                        + "чтобы выйти из здания с любой стены. 0 — без границы.",
+                d.dataBoundaryM, null, null, "м", 0, 50, 1));
+
         // ---- settings of the routing: stricter than the rules, never looser
         out.add(number("extra_clearance_m", ALGORITHM, "Дополнительный отступ от зданий и ограничений",
                 "Прибавляется к отступу по правилам (5/7/9 м от зданий по ДУ, 1–2 м от ограничений). Трассы "
@@ -438,6 +502,15 @@ public class ParamCatalog {
                 d.jointConnection, null, null,
                 option("true", "Да", "сервис ищет общие участки и разветвления"),
                 option("false", "Нет", "только раздельное подключение — врезок больше, сеть проще")));
+
+        out.add(flag("group_rebuild", ALGORITHM, "Перестройка группами",
+                "Готовая схема улучшается и целыми ветками: ОКС ниже одной камеры вынимаются вместе и подключаются "
+                        + "заново в нескольких порядках. Иногда находит схему с меньшей оценкой S и прямой "
+                        + "магистралью, но расчёт идёт примерно вдвое дольше.",
+                d.groupRebuild, null, null,
+                option("false", "Нет", "перестройка по одному ОКС"),
+                option("true", "Да", "по одному ОКС и целыми ветками — дольше"))
+                .dependsOn("joint_connection", true));
 
         out.add(number("turn_penalty", ALGORITHM, "Штраф за поворот",
                 "Сколько «стоит» поворот при поиске трассы, в единицах оценки S. Больше штраф — прямее трассы и "
@@ -620,7 +693,34 @@ public class ParamCatalog {
             }
             sb.append('\n');
         }
+        sb.append("## Готовые наборы настроек\n\n");
+        sb.append("Каталог (`presets`) содержит готовые наборы: поля запроса расчёта, остальные — по умолчанию. Значения,\n");
+        sb.append("не совпадающие ни с одним набором, в интерфейсе называются «Свой».\n\n");
+        sb.append("| Набор | Значения |\n|---|---|\n");
+        List<Map<String, Object>> rows = new ArrayList<>(presets());
+        Map<String, Object> auto = autoImprove();
+        rows.add(preset("auto_improve", String.valueOf(auto.get("title")), auto.get("description")
+                + "; переключатель рядом с наборами, выключен — `group_rebuild` = false", castMap(auto.get("on"))));
+        for (Map<String, Object> p : rows) {
+            sb.append("| **").append(p.get("title")).append("** (`").append(p.get("key")).append("`)<br>")
+                    .append(p.get("description")).append(" | ");
+            Map<String, Object> values = castMap(p.get("values"));
+            if (values.isEmpty()) {
+                sb.append("все по умолчанию");
+            }
+            List<String> parts = new ArrayList<>();
+            for (Map.Entry<String, Object> v : values.entrySet()) {
+                parts.add("`" + v.getKey() + "` = " + v.getValue());
+            }
+            sb.append(String.join("<br>", parts)).append(" |\n");
+        }
+        sb.append('\n');
         return sb.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object o) {
+        return (Map<String, Object>) o;
     }
 
     @SuppressWarnings("unchecked")

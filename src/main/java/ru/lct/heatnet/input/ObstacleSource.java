@@ -11,6 +11,16 @@ public interface ObstacleSource {
 
     List<Obstacle> intersecting(Geometry area);
 
+    /**
+     * The same obstacles one by one, in the same order, without a list of them all: for a pass over a large area
+     * whose obstacles are not kept (the boundary of the data).
+     */
+    default void forEachIntersecting(Geometry area, java.util.function.Consumer<Obstacle> action) {
+        for (Obstacle o : intersecting(area)) {
+            action.accept(o);
+        }
+    }
+
     /** In-memory implementation for files that fit into memory (tests, small datasets). */
     final class InMemory implements ObstacleSource {
         private final STRtree index = new STRtree();

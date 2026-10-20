@@ -69,18 +69,59 @@ public final class RoutingContext {
         double blockDistanceM;
 
         Zone(String objectId, String kind, Geometry raw, Geometry block, Geometry core) {
+            this(objectId, kind, raw, block, prepareCore(core));
+        }
+
+        Zone(String objectId, String kind, Geometry raw, Geometry block, PreparedGeometry core) {
             this.objectId = objectId;
             this.kind = kind;
             this.raw = raw;
             this.block = block;
             this.blockPrepared = PreparedGeometryFactory.prepare(block);
             this.blockClip = new SegmentClipper(block);
-            this.corePrepared = core == null || core.isEmpty() ? null : PreparedGeometryFactory.prepare(core);
+            this.corePrepared = core;
             // zones are shared by the planning threads: everything lazy is built here, in one thread
             raw.getEnvelopeInternal();
             block.getEnvelopeInternal();
-            warmUp(blockPrepared, corePrepared);
+            warmUp(blockPrepared);
         }
+
+        /**
+         * {@code blockPrepared.intersects(p)}: for a polygonal block by the point locator the clipper keeps anyway (the
+         * same test the prepared polygon makes for a point), so the prepared polygon builds its own locator only for
+         * the zones tested against lines.
+         */
+        boolean blockContains(Point p) {
+            if (!blockClip.hasLocator()) {
+                return blockPrepared.intersects(p);
+            }
+            Coordinate c = p.getCoordinate();
+            return block.getEnvelopeInternal().intersects(c) && blockClip.contains(c);
+        }
+    }
+
+    /** The prepared core of a zone (null for none), built before it is shared. */
+    static PreparedGeometry prepareCore(Geometry core) {
+        if (core == null || core.isEmpty()) {
+            return null;
+        }
+        PreparedGeometry prepared = PreparedGeometryFactory.prepare(core);
+        core.getEnvelopeInternal();
+        warmUp(prepared);
+        return prepared;
+    }
+
+    /** Kind of the zone outside the area of the data ({@link DataBoundary}): not an object of the input. */
+    public static final String DATA_BOUNDARY = "data_boundary";
+
+    /**
+     * The outside of the area of the data within the search area: no route edge may enter it, no route end may lie in
+     * it. Its corners (the inner corners of the area) are turning points like the corners of other zones.
+     */
+    public void addOutsideData(Geometry outside) {
+        Zone z = new Zone(DATA_BOUNDARY, DATA_BOUNDARY, outside, outside, (PreparedGeometry) null);
+        zones.add(z);
+        zoneIndex.insert(outside.getEnvelopeInternal(), z);
     }
 
     /** An object that may be crossed with a special section (road, tram, gas, cable, existing network). */
@@ -107,31 +148,62 @@ public final class RoutingContext {
         final NearCheck corridorNear;
 
         Special(String objectId, String type, RestrictionRule rule, Geometry raw, double corridorM) {
+            this(objectId, type, rule, new RawPart(raw, rule), corridorM);
+        }
+
+        /** The parts made of the raw geometry come from {@code own}: shared by the specials of one object for any DN. */
+        Special(String objectId, String type, RestrictionRule rule, RawPart own, double corridorM) {
             this.objectId = objectId;
             this.type = type;
             this.rule = rule;
+            this.raw = own.raw;
+            this.areal = own.areal;
+            this.boundary = own.boundary;
+            this.corridor = raw.buffer(corridorM, 8);
+            this.corridorPrepared = PreparedGeometryFactory.prepare(corridor);
+            this.boundsArea = own.boundsArea;
+            this.exclusionM = Math.max(corridorM, rule.getBoundsM());
+            this.corridorM = corridorM;
+            this.rawClip = own.rawClip;
+            this.crossedBoundary = own.crossedBoundary;
+            this.corridorClip = new SegmentClipper(corridor);
+            this.boundsClip = own.boundsClip;
+            this.rawNear = own.rawNear;
+            this.corridorNear = new NearCheck(corridor, corridorClip);
+            corridor.getEnvelopeInternal();
+            warmUp(corridorPrepared);
+        }
+    }
+
+    /**
+     * What a special makes of the raw geometry of its object alone (not of the corridor, which depends on the DN):
+     * made once per object and type and shared by its specials of every DN. Immutable once made.
+     */
+    static final class RawPart {
+        final Geometry raw;
+        final boolean areal;
+        final Geometry boundary;
+        final Geometry boundsArea;
+        final SegmentClipper rawClip;
+        final PolygonBoundary crossedBoundary;
+        final SegmentClipper boundsClip;
+        final NearCheck rawNear;
+
+        RawPart(Geometry raw, RestrictionRule rule) {
             this.raw = raw;
             this.areal = raw instanceof Polygonal;
             this.boundary = areal ? raw.getBoundary() : raw;
-            this.corridor = raw.buffer(corridorM, 8);
-            this.corridorPrepared = PreparedGeometryFactory.prepare(corridor);
             this.boundsArea = rule.getBounds() == RestrictionRule.Bounds.AREA_PLUS
                     ? raw.buffer(rule.getBoundsM(), 8) : null;
-            this.exclusionM = Math.max(corridorM, rule.getBoundsM());
-            this.corridorM = corridorM;
             this.rawClip = new SegmentClipper(raw);
             this.crossedBoundary = areal && rule.getMinAngleDeg() > 0 ? new PolygonBoundary(raw, rawClip) : null;
-            this.corridorClip = new SegmentClipper(corridor);
             this.boundsClip = boundsArea != null ? new SegmentClipper(boundsArea) : null;
             this.rawNear = new NearCheck(raw, rawClip);
-            this.corridorNear = new NearCheck(corridor, corridorClip);
             raw.getEnvelopeInternal();
-            corridor.getEnvelopeInternal();
             boundary.getEnvelopeInternal();
             if (boundsArea != null) {
                 boundsArea.getEnvelopeInternal();
             }
-            warmUp(corridorPrepared);
         }
     }
 
@@ -328,9 +400,13 @@ public final class RoutingContext {
      */
     public void addForbidden(String objectId, String kind, Geometry raw, double clearance, String cacheId) {
         double d = clearance + params.simplifyToleranceM;
+        // the core depends on the geometry alone: one prepared core for the zones of every DN (looked up outside the
+        // computation of the zone: the cache map must not be updated from within it)
+        PreparedGeometry core = raw instanceof Polygonal
+                ? cache.<PreparedGeometry>object(cacheId, "core/" + kind, 0, () -> prepareCore(raw.buffer(-0.05)))
+                : null;
         Zone z = cache.object(cacheId, "zone/" + kind, d, () -> {
             Geometry block = cache.buffer(cacheId, kind, d, () -> mitreBuffer(simplify(raw), d));
-            Geometry core = raw instanceof Polygonal ? raw.buffer(-0.05) : null;
             Zone zone = new Zone(objectId, kind, raw, block, core);
             zone.blockDistanceM = d;
             zone.escapeRadiusM = escapeRadius(clearance);
@@ -354,7 +430,7 @@ public final class RoutingContext {
         if (block.isEmpty()) {
             return;
         }
-        Zone z = new Zone(objectId, "own_oks", polygon, block, null);
+        Zone z = new Zone(objectId, "own_oks", polygon, block, (PreparedGeometry) null);
         zones.add(z);
         zoneIndex.insert(block.getEnvelopeInternal(), z);
     }
@@ -385,7 +461,9 @@ public final class RoutingContext {
     }
 
     private void addSpecial(String id, String type, RestrictionRule rule, Geometry raw, double corridorM) {
-        Special sp = cache.object(id, "special/" + type, corridorM, () -> new Special(id, type, rule, raw, corridorM));
+        // looked up outside the computation of the special: the cache map must not be updated from within it
+        RawPart own = cache.object(id, "special-raw/" + type, 0, () -> new RawPart(raw, rule));
+        Special sp = cache.object(id, "special/" + type, corridorM, () -> new Special(id, type, rule, own, corridorM));
         specials.add(sp);
         specialIndex.insert(sp.corridor.getEnvelopeInternal(), sp);
     }
@@ -572,7 +650,7 @@ public final class RoutingContext {
         Point p = Crs.UTM_FACTORY.createPoint(c);
         boolean[] free = {true};
         zones().forEach(new Envelope(c), (Zone z) -> {
-            if (z.blockPrepared.intersects(p)) {
+            if (z.blockContains(p)) {
                 free[0] = false;
             }
             return free[0];
@@ -597,7 +675,7 @@ public final class RoutingContext {
         }
         boolean[] free = {true};
         forEachZone(new Envelope(c), z -> {
-            if (z.blockPrepared.intersects(p)) {
+            if (z.blockContains(p)) {
                 free[0] = false;
             }
             return free[0];
@@ -628,7 +706,7 @@ public final class RoutingContext {
         List<Zone> out = new ArrayList<>();
         Point p = Crs.UTM_FACTORY.createPoint(c);
         forEachZone(new Envelope(c), z -> {
-            if (!NEW_ROUTE.equals(z.kind) && z.blockPrepared.intersects(p)) {
+            if (!NEW_ROUTE.equals(z.kind) && !DATA_BOUNDARY.equals(z.kind) && z.blockContains(p)) {
                 out.add(z);
             }
             return true;
@@ -663,7 +741,7 @@ public final class RoutingContext {
         LengthIndexedLine lil = new LengthIndexedLine(line);
         List<double[]> ivs = new ArrayList<>();
         forEachZone(line.getEnvelopeInternal(), z -> {
-            if (!NEW_ROUTE.equals(z.kind) && z.blockPrepared.intersects(line)) {
+            if (!NEW_ROUTE.equals(z.kind) && !DATA_BOUNDARY.equals(z.kind) && z.blockPrepared.intersects(line)) {
                 Geometry in = z.block.intersection(line);
                 for (int i = 0; i < in.getNumGeometries(); i++) {
                     Geometry g = in.getGeometryN(i);
@@ -694,7 +772,7 @@ public final class RoutingContext {
         Endpoint e = new Endpoint(c);
         Point p = Crs.UTM_FACTORY.createPoint(c);
         forEachZone(new Envelope(c), z -> {
-            if (z.blockPrepared.intersects(p)) {
+            if (z.blockContains(p)) {
                 e.escapedZones.add(z);
             }
             return true;

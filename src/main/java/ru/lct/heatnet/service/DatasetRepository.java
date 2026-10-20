@@ -563,24 +563,51 @@ public class DatasetRepository {
                 + " WHERE object_type IN ('oks_existing', 'restriction') AND geom_utm && ST_GeomFromWKB(?, 32637) "
                 + "AND ST_Intersects(geom_utm, ST_GeomFromWKB(?, 32637)) ORDER BY fid COLLATE \"C\"";
         // called from several planning threads at once: no shared writers or readers
-        return area -> {
-            byte[] a = new WKBWriter(2, false).write(area);
-            WKBReader reader = new WKBReader(Crs.UTM_FACTORY);
-            List<Obstacle> out = new ArrayList<>();
-            jdbc.query(con -> {
-                PreparedStatement ps = con.prepareStatement(sql);
-                ps.setBytes(1, a);
-                ps.setBytes(2, a);
-                return ps;
-            }, (ResultSet rs) -> {
-                try {
-                    Geometry g = reader.read(rs.getBytes(4));
-                    out.add(new Obstacle(rs.getString(1), ObjectType.fromCode(rs.getString(2)), rs.getString(3), g));
-                } catch (ParseException e) {
-                    throw new IllegalStateException(e);
-                }
-            });
-            return out;
+        return new ObstacleSource() {
+            @Override
+            public List<Obstacle> intersecting(Geometry area) {
+                List<Obstacle> out = new ArrayList<>();
+                query(area, 0, out::add);
+                return out;
+            }
+
+            /** Rows fetched by a cursor in pieces: the driver does not hold the whole result of a large area. */
+            @Override
+            public void forEachIntersecting(Geometry area, java.util.function.Consumer<Obstacle> action) {
+                query(area, 500, action);
+            }
+
+            private void query(Geometry area, int fetchSize, java.util.function.Consumer<Obstacle> action) {
+                byte[] a = new WKBWriter(2, false).write(area);
+                WKBReader reader = new WKBReader(Crs.UTM_FACTORY);
+                jdbc.execute((Connection con) -> {
+                    // the PostgreSQL driver fetches by a cursor only inside a transaction; an outer one is left alone
+                    boolean own = fetchSize > 0 && con.getAutoCommit();
+                    if (own) {
+                        con.setAutoCommit(false);
+                    }
+                    try (PreparedStatement ps = con.prepareStatement(sql)) {
+                        ps.setFetchSize(fetchSize);
+                        ps.setBytes(1, a);
+                        ps.setBytes(2, a);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                Geometry g = reader.read(rs.getBytes(4));
+                                action.accept(new Obstacle(rs.getString(1), ObjectType.fromCode(rs.getString(2)),
+                                        rs.getString(3), g));
+                            }
+                        } catch (ParseException e) {
+                            throw new IllegalStateException(e);
+                        }
+                    } finally {
+                        if (own) {
+                            con.commit();
+                            con.setAutoCommit(true);
+                        }
+                    }
+                    return null;
+                });
+            }
         };
     }
 }

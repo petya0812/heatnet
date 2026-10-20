@@ -120,8 +120,9 @@ class PipelineTest {
         }
         assertTrue(best.summary.score <= 71.953, "not worse than the baseline of 15.09.2026 (docs/metrics.md)");
         assertTrue(best.tieIns.size() < 30);
-        // the baseline of 15.09.2026 had 9.11 turns per km of new network (turns sharper than 2°); at least 30 % fewer
-        assertTrue(best.metrics.turnsPerKm <= 9.11 * 0.7, "turns per km: " + best.metrics.turnsPerKm);
+        // the baseline of 15.09.2026 had 9.11 turns per km of new network (turns sharper than 2°); at least 20 % fewer
+        // (30 % with the group rebuild, which is off by default)
+        assertTrue(best.metrics.turnsPerKm <= 9.11 * 0.8, "turns per km: " + best.metrics.turnsPerKm);
         assertTrue(best.metrics.minStraightM >= 1.0, "no tiny straight pieces: " + best.metrics.minStraightM);
     }
 }

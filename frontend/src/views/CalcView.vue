@@ -26,6 +26,7 @@ import UiEmpty from '@/components/ui/UiEmpty.vue';
 import UiMenu from '@/components/ui/UiMenu.vue';
 import UiIconButton from '@/components/ui/UiIconButton.vue';
 import ParamField from '@/components/calc/ParamField.vue';
+import PresetPicker from '@/components/calc/PresetPicker.vue';
 
 const app = useApp();
 const route = useRoute();
@@ -104,14 +105,14 @@ const fixed = computed(() => {
 });
 const fixedCount = computed(() => entries.value.filter((x) => !x.editable).length);
 
-/** Folded groups (a per-viewer convenience); a folded group shows its current values in one line. */
-const folded = reactive<Record<string, boolean>>(prefs.get('calcFolded', {}));
-watch(folded, () => prefs.set('calcFolded', {...folded}));
+/** Opened groups (a per-viewer convenience): groups are folded by default; a folded group shows its values in one line. */
+const opened = reactive<Record<string, boolean>>(prefs.get('calcOpened', {}));
+watch(opened, () => prefs.set('calcOpened', {...opened}));
 const summaryOf = (items: any[]) => items.filter((e) => paramVisible(e, values.value)).slice(0, 3)
   .map((e) => `${e.title}: ${paramLabel(e, values.value[e.key])}`).join(' · ');
 /** Folding from the header that stays on top while scrolling: the folded group comes back into view. */
 async function toggle(cls: string, ev: Event) {
-  folded[cls] = !folded[cls];
+  opened[cls] = !opened[cls];
   const section = (ev.currentTarget as HTMLElement).closest('section');
   await nextTick();
   // the scroll of the panel body only: scrollIntoView would also move the panel itself inside the page
@@ -123,6 +124,13 @@ async function toggle(cls: string, ev: Event) {
 }
 
 const resetAll = () => { values.value = defaults(); };
+
+/** «Свой» opens the groups of settings to edit them. */
+async function openGroups() {
+  for (const g of groups.value) opened[g.cls] = true;
+  await nextTick();
+  document.getElementById('calc-groups')?.scrollIntoView({block: 'start', behavior: 'smooth'});
+}
 
 // ------------------------------------------------------------------ name, start
 
@@ -203,6 +211,8 @@ const focusKey = computed(() => route.query.param as string | undefined);
 const flash = ref<string | null>(null);
 watch([focusKey, () => app.catalog], async ([k]) => {
   if (!k || !app.catalog) return;
+  const g = groups.value.find((x) => x.items.some((e: any) => e.key === k));
+  if (g) opened[g.cls] = true;
   await nextTick();
   const el = document.getElementById('param-' + k);
   if (el) {
@@ -266,19 +276,23 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
         <UiBadge v-else tone="neutral">по умолчанию</UiBadge>
       </div>
 
+      <!-- presets and auto-improve on top, then the groups of settings, folded by default -->
+      <PresetPicker @custom="openGroups" />
+
       <!-- editable groups: one frame per group; its header stays on top while the group is scrolled -->
+      <div id="calc-groups" class="space-y-3">
       <section v-for="g in groups" :key="g.cls" class="card overflow-clip" :aria-labelledby="'g-' + g.cls">
         <button type="button" class="sticky -top-1 z-[2] flex w-full items-start gap-2.5 bg-surface-solid px-4 pb-2.5 pt-3.5 text-left transition-colors hover:bg-surface-2"
-          :class="folded[g.cls] ? '' : 'shadow-[0_1px_0_var(--line)]'" :aria-expanded="!folded[g.cls]" @click="toggle(g.cls, $event)">
+          :class="!opened[g.cls] ? '' : 'shadow-[0_1px_0_var(--line)]'" :aria-expanded="!!opened[g.cls]" @click="toggle(g.cls, $event)">
           <component :is="g.icon" class="mt-0.5 size-[18px] shrink-0 text-accent" aria-hidden="true" />
           <span class="min-w-0 flex-1">
             <h3 :id="'g-' + g.cls" class="text-[14px] font-semibold">{{ g.title }}</h3>
-            <span class="block text-xs text-ink-3">{{ folded[g.cls] ? summaryOf(g.items) : g.desc }}</span>
+            <span class="block text-xs text-ink-3">{{ !opened[g.cls] ? summaryOf(g.items) : g.desc }}</span>
           </span>
           <span v-if="g.items.filter(changed).length" class="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent-ink"><span class="size-1.5 rounded-full bg-accent" aria-hidden="true" />изменено {{ g.items.filter(changed).length }}</span>
-          <ChevronDown class="mt-0.5 size-4 shrink-0 text-ink-4 transition-transform" :class="folded[g.cls] ? '' : 'rotate-180'" aria-hidden="true" />
+          <ChevronDown class="mt-0.5 size-4 shrink-0 text-ink-4 transition-transform" :class="!opened[g.cls] ? '' : 'rotate-180'" aria-hidden="true" />
         </button>
-        <div v-show="!folded[g.cls]" class="divide-y divide-line">
+        <div v-show="opened[g.cls]" class="divide-y divide-line">
           <template v-for="row in g.rows" :key="row.e.key">
             <div v-if="paramVisible(row.e, values)" :id="'param-' + row.e.key" class="px-4 py-3.5 transition-colors duration-500" :class="flash === row.e.key ? 'bg-accent-soft' : ''">
               <ParamField :e="row.e" :condition="conditionOf(row.e)">
@@ -294,6 +308,7 @@ const fixedOpen = computed(() => !!focusKey.value && entries.value.some((e) => e
           </template>
         </div>
       </section>
+      </div>
 
       <!-- name -->
       <UiSection title="Название и заметка" :icon="Pencil" :default-open="!!(draft.name || draft.note)" meta="необязательно">

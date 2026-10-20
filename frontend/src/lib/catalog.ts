@@ -32,3 +32,21 @@ export function paramDiff(catalog: any, params: Record<string, unknown> | null) 
   }
   return out;
 }
+
+/** Values of all editable settings: the defaults with `over` on top. */
+export function fullValues(catalog: any, over: Record<string, unknown> = {}) {
+  const out: Record<string, unknown> = {};
+  for (const e of catalog.params) if (e.editable) out[e.key] = e.default;
+  return Object.assign(out, over);
+}
+
+/** Two sets of values are the same calculation: settings hidden by their condition (`depends_on`) do not count. */
+export function sameValues(catalog: any, a: Record<string, unknown>, b: Record<string, unknown>) {
+  return catalog.params.every((e: any) => !e.editable || !paramVisible(e, a) || String(a[e.key]) === String(b[e.key]));
+}
+
+/** The preset (`GET /api/params` → `presets`) the values are equal to, or `custom`. */
+export function presetOf(catalog: any, values: Record<string, unknown>): string {
+  const p = (catalog.presets || []).find((x: any) => sameValues(catalog, values, fullValues(catalog, x.values)));
+  return p ? p.key : 'custom';
+}

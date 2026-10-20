@@ -194,7 +194,7 @@ class ServiceLayersTest {
         PlanParams defaults = new PlanParams();
         RunParams req = new RunParams();
         req.turnPenalty = 0.4;
-        req.oddJointTurns = 1.0;
+        req.oddJointTurns = 2.0;
         req.existingFlow = "capacity_share";
         req.existingFlowShare = 0.8;
         PlanParams p = req.apply(defaults);
@@ -202,8 +202,8 @@ class ServiceLayersTest {
         assertEquals(0.8, p.rules.existingFlowShare, 1e-12);
         assertEquals("ZERO", defaults.rules.existingFlow.name());
         assertEquals(0.4, p.turnPenaltyScore, 1e-12);
-        assertEquals(1.0, p.oddJointTurns, 1e-12);
-        assertEquals(1.0, RunParams.of(p).oddJointTurns, 1e-12);
+        assertEquals(2.0, p.oddJointTurns, 1e-12);
+        assertEquals(2.0, RunParams.of(p).oddJointTurns, 1e-12);
         // defaults untouched, other fields copied
         assertEquals(defaults.maxExpansions, p.maxExpansions);
         assertEquals(defaults.threads, p.threads);

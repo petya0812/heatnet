@@ -16,7 +16,7 @@ public final class PlanParams {
     /** Penalty for every turn of the route, in score units (≈ 25 m of a small pipe): fewer, cleaner turns. */
     public double turnPenaltyScore = 0.15;
     /** A joint with the network that is not a T (an odd angle to the pipe) costs this many turns. */
-    public double oddJointTurns = 2;
+    public double oddJointTurns = 1;
     /**
      * Weight of the shape in the choice of a scheme (acceptance of a rebuild, the choice between orders of joining,
      * the order of variants): the schemes are compared by {@code S + shapeWeight * turnPenaltyScore * (turns +
@@ -24,10 +24,18 @@ public final class PlanParams {
      * reported score S does not change.
      */
     public double shapeWeight = 1;
-    /** Local search also takes out groups of OKS (a branch of the network) and connects them again in several orders. */
-    public boolean groupRebuild = true;
+    /**
+     * Local search also takes out groups of OKS (a branch of the network) and connects them again in several orders.
+     * Off by default: it takes about as long as the rest of the local search.
+     */
+    public boolean groupRebuild = false;
     /** Local search lays shared pieces with turns anew between their nodes (fewer turns, not a worse scheme). */
     public boolean straightenShared = true;
+    /**
+     * Boundary of the data, metres: routes stay within this distance of the outer objects of the dataset (see
+     * {@link DataBoundary}) — beyond them nothing is known, the empty space there is not a free one. 0 — no boundary.
+     */
+    public double dataBoundaryM = 5;
     /** Obstacle simplification tolerance before buffering, metres (compensated in the buffer). */
     public double simplifyToleranceM = 0.3;
     /** Offset of routing vertices outside the blocking buffers, metres. */

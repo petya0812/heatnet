@@ -234,6 +234,11 @@ final class SegmentClipper {
         return t >= -1e-12 && t <= 1 + 1e-12 && u >= -1e-12 && u <= 1 + 1e-12;
     }
 
+    /** Whether {@link #contains} is answered by a point locator (a polygonal, non-empty geometry). */
+    boolean hasLocator() {
+        return locator != null;
+    }
+
     boolean contains(Coordinate c) {
         return locator != null && locator.locate(c) != Location.EXTERIOR;
     }

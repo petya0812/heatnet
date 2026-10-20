@@ -218,6 +218,9 @@ public class RunService {
         if (p.jointConnection != d.jointConnection) {
             parts.add(p.jointConnection ? "совместное подключение" : "только раздельное подключение");
         }
+        if (p.jointConnection && p.groupRebuild != d.groupRebuild) {
+            parts.add(p.groupRebuild ? "перестройка группами" : "без перестройки группами");
+        }
         if (p.turnPenaltyScore != d.turnPenaltyScore) {
             parts.add("штраф за поворот " + num(p.turnPenaltyScore));
         }
@@ -251,6 +254,9 @@ public class RunService {
         }
         if (p.rules.tieInInClearance != d.rules.tieInInClearance) {
             parts.add(p.rules.tieInInClearance ? "врезка в зоне отступа" : "врезка только вне зон отступа");
+        }
+        if (p.dataBoundaryM != d.dataBoundaryM) {
+            parts.add(p.dataBoundaryM > 0 ? "граница данных " + num(p.dataBoundaryM) + " м" : "без границы данных");
         }
         if (p.entryLegM != d.entryLegM) {
             parts.add("прямой участок от стены не короче " + num(p.entryLegM) + " м");

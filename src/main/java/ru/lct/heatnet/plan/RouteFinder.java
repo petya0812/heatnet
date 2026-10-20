@@ -54,12 +54,15 @@ public final class RouteFinder {
     private final PlanParams params;
     private final InputModel model;
     private final ObstacleSource obstacles;
+    /** Area of the data routes stay within ({@link PlanParams#dataBoundaryM}); null — no boundary. */
+    private final DataBoundary dataBoundary;
 
     public RouteFinder(ReferenceData ref, PlanParams params, InputModel model, ObstacleSource obstacles) {
         this.ref = ref;
         this.params = params;
         this.model = model;
         this.obstacles = obstacles;
+        this.dataBoundary = DataBoundary.build(model, obstacles, params);
         this.zoneCache = new ZoneCache();
         this.sharedCache = new java.util.LinkedHashMap<String, RoutingContext.Static>(64, 0.75f, true) {
             @Override
@@ -101,6 +104,7 @@ public final class RouteFinder {
         this.params = base.params;
         this.model = base.model;
         this.obstacles = base.obstacles;
+        this.dataBoundary = base.dataBoundary;
         this.zoneCache = base.zoneCache;
         this.sharedCache = base.sharedCache;
         this.exitCache = base.exitCache;
@@ -357,6 +361,9 @@ public final class RouteFinder {
             if (radius >= params.searchRadiusMaxM) {
                 break;
             }
+            if (dataBoundary != null && dataBoundary.insideCircle(p, radius)) {
+                break; // the whole area of the data is searched already: a larger circle adds nothing to go through
+            }
             radius = Math.min(params.searchRadiusMaxM, radius * 2);
         }
         return null;
@@ -438,6 +445,17 @@ public final class RouteFinder {
                 ctx.addExistingNetwork(s);
             }
         }
+        if (dataBoundary != null) {
+            Geometry outside = dataBoundary.outsideWithin(loadArea);
+            if (outside != null) {
+                ctx.addOutsideData(outside);
+            }
+        }
+    }
+
+    /** Area of the data routes stay within; null — no boundary ({@link PlanParams#dataBoundaryM} 0). */
+    public DataBoundary dataBoundary() {
+        return dataBoundary;
     }
 
     /** Extra goals of the search: points on the new network of the variant (joint connection). */
@@ -996,7 +1014,9 @@ public final class RouteFinder {
     private Frame frameFor(RoutingContext ctx, Coordinate p) {
         List<Geometry> outlines = new ArrayList<>();
         for (RoutingContext.Zone z : ctx.getZones()) {
-            outlines.add(z.raw);
+            if (!RoutingContext.DATA_BOUNDARY.equals(z.kind)) {
+                outlines.add(z.raw);
+            }
         }
         Coordinate nearest = null;
         double best = Double.POSITIVE_INFINITY;

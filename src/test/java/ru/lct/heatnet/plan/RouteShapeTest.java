@@ -81,6 +81,7 @@ class RouteShapeTest {
     @Test
     void jointWithAPipe() throws Exception {
         PlanParams params = new PlanParams();
+        params.oddJointTurns = 2;
         RouteFinder f = finder(params);
         TieOption straight = tie(0, 0, new double[][]{{1, 0}, {-1, 0}});
         Frame frame = new Frame(0, 90);
@@ -167,6 +168,8 @@ class RouteShapeTest {
     }
 
     private static RouteFinder finder(PlanParams params) throws Exception {
+        // the shapes are drawn around a lone building: they leave the boundary of so small a dataset
+        params.dataBoundaryM = 0;
         String data = dataset(null, new double[]{30, -10});
         LoadedInput in = LoadedInput.read(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), REF,
                 params.rules);

@@ -31,8 +31,8 @@ public class RunParams {
     public Double turnPenalty;
 
     @Schema(description = "Цена стыка с сетью не буквой «Т» (под нестандартным углом к трубе), в поворотах: 0 — "
-            + "бесплатно, 2 — как два поворота (угол к обоим направлениям трубы)",
-            minimum = "0", maximum = "4", defaultValue = "2", example = "2")
+            + "бесплатно, 1 — как один поворот, 2 — как два (угол к обоим направлениям трубы)",
+            minimum = "0", maximum = "4", defaultValue = "1", example = "1")
     @JsonProperty("odd_joint_turns")
     public Double oddJointTurns;
 
@@ -115,10 +115,22 @@ public class RunParams {
     @JsonProperty("entry_leg_m")
     public Double entryLegM;
 
+    @Schema(description = "Граница данных, м (0…50; по умолчанию 5): за пределами набора зданий и препятствий данных "
+            + "нет — трасса не уходит дальше этого расстояния от крайних объектов набора; 0 — без границы",
+            minimum = "0", maximum = "50", defaultValue = "5", example = "5")
+    @JsonProperty("data_boundary_m")
+    public Double dataBoundaryM;
+
     @Schema(description = "Совместное подключение нескольких ОКС через одну врезку (по умолчанию true); при false — "
             + "каждый ОКС своей трассой и своей врезкой", defaultValue = "true")
     @JsonProperty("joint_connection")
     public Boolean jointConnection;
+
+    @Schema(description = "Перестройка группами при совместном подключении: ветка сети (ОКС ниже одной камеры) "
+            + "вынимается целиком и подключается заново в нескольких порядках. Иногда находит схему лучше, расчёт "
+            + "дольше примерно вдвое (по умолчанию false)", defaultValue = "false")
+    @JsonProperty("group_rebuild")
+    public Boolean groupRebuild;
 
     @Schema(description = "Название расчёта (по умолчанию — из параметров, отличных от настроек сервиса); "
             + "не параметр расчёта")
@@ -180,6 +192,9 @@ public class RunParams {
         if (jointConnection != null) {
             p.jointConnection = jointConnection;
         }
+        if (groupRebuild != null) {
+            p.groupRebuild = groupRebuild;
+        }
         if (buildingEntry != null) {
             try {
                 p.rules.entry = RuleOptions.Entry.valueOf(buildingEntry.trim().toUpperCase());
@@ -211,6 +226,12 @@ public class RunParams {
         }
         if (tieInInClearance != null) {
             p.rules.tieInInClearance = tieInInClearance;
+        }
+        if (dataBoundaryM != null) {
+            if (dataBoundaryM < 0 || dataBoundaryM > 50) {
+                throw new IllegalArgumentException("data_boundary_m must be within [0, 50]");
+            }
+            p.dataBoundaryM = dataBoundaryM;
         }
         if (entryLegM != null) {
             if (entryLegM < 0 || entryLegM > 20) {
@@ -257,9 +278,11 @@ public class RunParams {
         r.turnAngles = turnAnglesName(p.turnStepDeg);
         r.turnAnglesStrict = p.turnStepStrict;
         r.jointConnection = p.jointConnection;
+        r.groupRebuild = p.groupRebuild;
         r.buildingEntry = p.rules.entry.name();
         r.entrySlackM = p.rules.entrySlackM;
         r.entryLegM = p.entryLegM;
+        r.dataBoundaryM = p.dataBoundaryM;
         r.throughBuildings = p.rules.throughBuildings.name();
         r.buildingCrossingK = p.rules.buildingCrossingK;
         r.throughOwnParts = p.rules.throughOwnParts;
