@@ -142,6 +142,19 @@ public final class OutputValidator {
         this.buildingCrossing = RestrictionRule.crossing(RuleOptions.BUILDING_CROSSING, rules.buildingCrossingK);
     }
 
+    /**
+     * Where the outdoor part of a segment at a connection point ends: the last point of its route outside the building
+     * ({@code atCp} — the connection point is the end of the segment, otherwise its start). A segment that is only the
+     * inlet into the building (it starts at the wall, e.g. at the node where a special section ends there) has no
+     * outdoor part: the route of its OKS ends where the segment starts, at the wall, not at the connection point.
+     */
+    static Coordinate outdoorEnd(LineString line, LineString route, boolean atCp) {
+        if (route.isEmpty()) {
+            return atCp ? line.getCoordinateN(0) : line.getCoordinateN(line.getNumPoints() - 1);
+        }
+        return atCp ? route.getCoordinateN(route.getNumPoints() - 1) : route.getCoordinateN(0);
+    }
+
     public ValidationReport validate(LoadedInput input, InputStream output) throws IOException {
         return validate(input.getModel(), input.obstacleSource(), output);
     }
@@ -439,7 +452,7 @@ public final class OutputValidator {
             for (Out c : newChambers.values()) {
                 for (InputModel.Segment s : model.getSegments().values()) {
                     if (s.line.distance(c.utm) <= POS_TOL) {
-                        attachTo.put(c.id, s.id);
+                        attachTo.put(c.id, model.placeOf(s, c.utm.getCoordinate(), POS_TOL));
                         break;
                     }
                 }
@@ -822,6 +835,39 @@ public final class OutputValidator {
 
         // ---------------------------------------------------------- restrictions
 
+        /** Tie-ins into the existing network: existing chambers and new chambers on existing segments. */
+        Set<Coordinate> tieEndpoints() {
+            Set<Coordinate> pts = new HashSet<>();
+            for (String n : attachTo.keySet()) {
+                Coordinate c = nodePos.get(n);
+                if (c != null) {
+                    pts.add(c);
+                }
+            }
+            return pts;
+        }
+
+        /**
+         * The end of the segment at a tie-in that lies within the clearance to the object, or null. Unless such
+         * tie-ins are allowed ({@link RuleOptions#tieInInClearance}), the route has to tie in outside the clearance:
+         * appendix 2.2 and 4 excuse only the final straight piece into the own building.
+         */
+        Coordinate tieWithin(Seg s, Geometry object, double clearance, Set<Coordinate> ties) {
+            for (Coordinate c : new Coordinate[]{s.route.getCoordinateN(0),
+                    s.route.getCoordinateN(s.route.getNumPoints() - 1)}) {
+                if (containsCoord(ties, c) && object.distance(Crs.UTM_FACTORY.createPoint(c)) < clearance - DIST_TOL) {
+                    return c;
+                }
+            }
+            return null;
+        }
+
+        void tieWithinError(Seg s, String objectId, Geometry object, double clearance, Coordinate tie) {
+            rep.error("R-RESTR", v, s.f.id, String.format(java.util.Locale.ROOT, "Tie-in is %.2f m from %s, within "
+                    + "its clearance %.2f m: the route has to tie in outside the clearance (setting "
+                    + "tie_in_in_clearance)", object.distance(Crs.UTM_FACTORY.createPoint(tie)), objectId, clearance));
+        }
+
         Set<Coordinate> routeEndpoints() {
             Set<Coordinate> pts = new HashSet<>();
             for (String n : attachTo.keySet()) {
@@ -834,11 +880,10 @@ public final class OutputValidator {
                 // the outdoor part of a route ends where it leaves the building of its OKS, not at the
                 // connection point inside it: the clearance may be broken only around that end
                 if (oksByCp.containsKey(s.end)) {
-                    pts.add(s.route.isEmpty() ? nodePos.get(s.end)
-                            : s.route.getCoordinateN(s.route.getNumPoints() - 1));
+                    pts.add(outdoorEnd(s.line, s.route, true));
                 }
                 if (oksByCp.containsKey(s.start)) {
-                    pts.add(s.route.isEmpty() ? nodePos.get(s.start) : s.route.getCoordinateN(0));
+                    pts.add(outdoorEnd(s.line, s.route, false));
                 }
             }
             return pts;
@@ -1039,7 +1084,7 @@ public final class OutputValidator {
          * Appendix 2.2: the building of an OKS keeps its clearance for every segment, the ones that feed it included;
          * only the final straight piece into it, through the clearance along the normal of its wall, is excused.
          */
-        void ownBuildingClearance(Seg s, Obstacle o, boolean own) {
+        void ownBuildingClearance(Seg s, Obstacle o, boolean own, Set<Coordinate> ties) {
             Geometry b = buildingOf(o);
             if (!own && b instanceof Polygonal && s.route.intersects(b.buffer(-0.05))) {
                 rep.error("R-RESTR", v, s.f.id, "Segment goes through building " + o.getId() + " of the OKS it feeds");
@@ -1056,6 +1101,23 @@ public final class OutputValidator {
             }
             double d = rest.distance(b);
             if (d < clearance - DIST_TOL) {
+                Coordinate tie = tieWithin(s, b, clearance, ties);
+                if (tie != null && !rules.tieInInClearance) {
+                    tieWithinError(s, o.getId(), b, clearance, tie);
+                    return;
+                }
+                if (tie != null) {
+                    // the tie-in itself lies within the clearance: the route may be closer only around it, as the
+                    // planner allows around a route end (RoutingContext.escapeRadius)
+                    Geometry far = rest.difference(Crs.UTM_FACTORY.createPoint(tie)
+                            .buffer(RoutingContext.escapeRadius(clearance)));
+                    if (far.isEmpty() || far.distance(b) >= clearance - DIST_TOL) {
+                        rep.warning("R-RESTR", v, s.f.id, String.format(java.util.Locale.ROOT, "Route end is %.2f m "
+                                + "from building %s of the OKS it feeds (clearance %.2f m): the tie-in itself lies "
+                                + "within the clearance", d, o.getId(), clearance));
+                        return;
+                    }
+                }
                 rep.error("R-RESTR", v, s.f.id, String.format(java.util.Locale.ROOT, "%.2f m from building %s of "
                         + "the OKS it feeds, clearance %.2f m required: only the straight piece into it along the "
                         + "normal of its wall is excused", d, o.getId(), clearance));
@@ -1065,6 +1127,13 @@ public final class OutputValidator {
         void restrictions() {
             straightEntriesOnOutlines();
             Set<Coordinate> endpoints = routeEndpoints();
+            Set<Coordinate> ties = tieEndpoints();
+            // the clearance may be broken around the route ends: the connection points, and the tie-ins only when
+            // they may lie within clearances
+            Set<Coordinate> clearanceEnds = new HashSet<>(endpoints);
+            if (!rules.tieInInClearance) {
+                clearanceEnds.removeIf(c -> containsCoord(ties, c));
+            }
             List<Special> specials = new ArrayList<>();
             Map<String, Special> specialById = new HashMap<>();
             for (Seg s : segs) {
@@ -1086,7 +1155,7 @@ public final class OutputValidator {
                     if (own || feedsBuilding(s, o.getId())) {
                         // entering its own building is checked below as its own OKS
                         if (rules.entry.alongNormal()) {
-                            ownBuildingClearance(s, o, own);
+                            ownBuildingClearance(s, o, own, ties);
                         } else if (!own && o.getGeometry() instanceof Polygonal
                                 && s.route.intersects(buildingOf(o).buffer(-0.05))) {
                             // entry from any point of the outline: no clearance to the building it feeds, only not
@@ -1105,7 +1174,7 @@ public final class OutputValidator {
                     }
                     double clearance = r == null ? ref.buildingDistance(s.dn) + pipe.getHalfWidthM()
                             : r.getMinDistanceM() + pipe.getHalfWidthM() + r.getObjectWidthM() / 2.0;
-                    forbidden(s, o.getId(), o.getGeometry(), clearance, endpoints);
+                    forbidden(s, o.getId(), o.getGeometry(), clearance, clearanceEnds, ties);
                 }
                 for (InputModel.Oks other : model.getOks()) {
                     if (other.polygon == null || !other.polygon.intersects(around)) {
@@ -1162,17 +1231,70 @@ public final class OutputValidator {
             rep.checked("R-SPEC", specials.size());
         }
 
-        void forbidden(Seg s, String objectId, Geometry raw, double clearance, Set<Coordinate> endpoints) {
+        /** Segments at every node (built once). */
+        private Map<String, List<Seg>> segsAtNode;
+
+        /**
+         * Route ends of the route a segment belongs to: its own ends and those of the segments it continues through
+         * technical nodes (a route is split there only by the change of the laying method — a special section that ends
+         * close to the building, say). The planner excuses the clearance around a route end along the whole route
+         * edge, so the check does the same; it stops at chambers, where routes meet.
+         */
+        List<Coordinate> routeEndsOf(Seg s, Set<Coordinate> endpoints) {
+            if (segsAtNode == null) {
+                segsAtNode = new HashMap<>();
+                for (Seg x : segs) {
+                    segsAtNode.computeIfAbsent(x.start, k -> new ArrayList<>()).add(x);
+                    segsAtNode.computeIfAbsent(x.end, k -> new ArrayList<>()).add(x);
+                }
+            }
+            List<Coordinate> out = new ArrayList<>();
+            Set<Seg> seen = new HashSet<>();
+            List<Seg> stack = new ArrayList<>(java.util.Collections.singletonList(s));
+            while (!stack.isEmpty()) {
+                Seg x = stack.remove(stack.size() - 1);
+                if (!seen.add(x)) {
+                    continue;
+                }
+                if (!x.route.isEmpty()) {
+                    for (Coordinate c : new Coordinate[]{x.route.getCoordinateN(0),
+                            x.route.getCoordinateN(x.route.getNumPoints() - 1)}) {
+                        if (containsCoord(endpoints, c)) {
+                            out.add(c);
+                        }
+                    }
+                } else {
+                    // an inlet only: the route ends at its outdoor end
+                    for (Coordinate c : new Coordinate[]{x.line.getCoordinateN(0),
+                            x.line.getCoordinateN(x.line.getNumPoints() - 1)}) {
+                        if (containsCoord(endpoints, c)) {
+                            out.add(c);
+                        }
+                    }
+                }
+                for (String n : new String[]{x.start, x.end}) {
+                    if (techNodes.containsKey(n)) {
+                        stack.addAll(segsAtNode.getOrDefault(n, java.util.Collections.<Seg>emptyList()));
+                    }
+                }
+            }
+            return out;
+        }
+
+        void forbidden(Seg s, String objectId, Geometry raw, double clearance, Set<Coordinate> endpoints,
+                       Set<Coordinate> ties) {
             double d = s.route.distance(raw);
             if (d >= clearance - DIST_TOL) {
                 return;
             }
+            Coordinate tie = rules.tieInInClearance ? null : tieWithin(s, raw, clearance, ties);
+            if (tie != null) {
+                tieWithinError(s, objectId, raw, clearance, tie);
+                return;
+            }
             Geometry rest = s.route;
-            for (Coordinate c : new Coordinate[]{s.route.getCoordinateN(0),
-                    s.route.getCoordinateN(s.route.getNumPoints() - 1)}) {
-                if (containsCoord(endpoints, c)) {
-                    rest = rest.difference(Crs.UTM_FACTORY.createPoint(c).buffer(RoutingContext.escapeRadius(clearance)));
-                }
+            for (Coordinate c : routeEndsOf(s, endpoints)) {
+                rest = rest.difference(Crs.UTM_FACTORY.createPoint(c).buffer(RoutingContext.escapeRadius(clearance)));
             }
             boolean core = raw instanceof Polygonal && s.route.intersects(raw.buffer(-0.05));
             if (!core && (rest.isEmpty() || rest.distance(raw) >= clearance - DIST_TOL)) {

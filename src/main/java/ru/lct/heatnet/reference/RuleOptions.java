@@ -100,6 +100,14 @@ public final class RuleOptions {
      * connection point), they keep no clearance; by default they are the building like its main part.
      */
     public boolean throughOwnParts = false;
+    /**
+     * A tie-in into the existing network (a new chamber on an existing segment or an existing chamber) may lie within
+     * the clearance to a building or a forbidden restriction; the route is then closer than the clearance only near
+     * the tie-in. By default not: the appendix (2.2, 4) excuses only the final straight piece into the own building,
+     * so the tie-in is moved along the segment out of every clearance or the OKS is left without a route
+     * ({@code TIE_IN_IN_CLEARANCE}).
+     */
+    public boolean tieInInClearance = false;
 
     public static RuleOptions defaults() {
         return new RuleOptions();
@@ -114,6 +122,7 @@ public final class RuleOptions {
         r.throughBuildings = throughBuildings;
         r.buildingCrossingK = buildingCrossingK;
         r.throughOwnParts = throughOwnParts;
+        r.tieInInClearance = tieInInClearance;
         return r;
     }
 
@@ -124,6 +133,7 @@ public final class RuleOptions {
                 + " entry=" + entry + (entry == Entry.NEAR ? " " + entrySlackM : "")
                 + " throughBuildings=" + throughBuildings
                 + (throughBuildings != ThroughBuildings.NONE ? " k=" + buildingCrossingK : "")
-                + " throughOwnParts=" + throughOwnParts;
+                + " throughOwnParts=" + throughOwnParts
+                + " tieInInClearance=" + tieInInClearance;
     }
 }

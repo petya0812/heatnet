@@ -94,6 +94,14 @@ public final class Variant {
         public double insideLengthM;
         public double insideMinLengthM;
         public int entriesNotNearest;
+        /**
+         * Shape as the choice of a scheme sees it: turns of the new network (inside its pieces and where its pipe bends
+         * in a chamber) and joints that are not a T (a branch at an odd angle to the pipe), and the score of the choice
+         * {@code S + shapeWeight * turnPenalty * (shapeTurns + oddJointTurns * oddJoints)}.
+         */
+        public int shapeTurns;
+        public int oddJoints;
+        public double selectionScore;
     }
 
     /** Additional flow on a piece of an existing segment (whether or not its DN suffices) — for the map. */

@@ -363,6 +363,9 @@ public class OpenApiConfig {
         f("turns", "Поворотов трассы");
         f("VariantSummary.turns", "Поворотов во всей новой сети");
         f("turns_per_km", "Поворотов на километр новой сети");
+        f("selection_score", "Оценка выбора схемы: S + shape_weight × штраф за поворот × (повороты + цена стыка не "
+                + "«Т» × такие стыки); при shape_weight = 0 равна S. По ней сравниваются схемы и отбираются варианты, место "
+                + "варианта (rank) — по S");
         f("sharp_turns", "Поворотов острее допустимых (норма — 0)");
         f("small_turns", "Мелких изломов (норма — 0)");
         f("min_straight_m", "Самый короткий прямой отрезок, м");
@@ -394,8 +397,8 @@ public class OpenApiConfig {
         f("shared_with", "ОКС, питающиеся через то же присоединение");
         f("existing_chain", "Участки существующей сети от врезки до источника");
         f("specials", "Типы ограничений, пересечённых спецпроходом");
-        f("reason", "Код причины: NO_ROUTE, ENTRY_BLOCKED, LENGTH_LIMIT, SEARCH_LIMIT, FLOW_EXCEEDS_MAX_DN, "
-                + "NO_CONNECTION_POINT, NO_NETWORK");
+        f("reason", "Код причины: NO_ROUTE, ENTRY_BLOCKED, TIE_IN_IN_CLEARANCE, LENGTH_LIMIT, SEARCH_LIMIT, "
+                + "FLOW_EXCEEDS_MAX_DN, NO_CONNECTION_POINT, NO_NETWORK");
         f("reason_text", "Причина словами");
         f("detail", "Подробности: радиус поиска, ДУ, расстояние до сети");
 

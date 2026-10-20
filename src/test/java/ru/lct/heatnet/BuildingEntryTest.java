@@ -208,6 +208,91 @@ class BuildingEntryTest {
         assertEquals(3.0, c.get(c.size() - 2).distance(c.get(c.size() - 1)), 0.05, "from the nearest wall");
     }
 
+    /**
+     * The existing pipe comes from the north and ends 3 m east of the own building, within the clearance to it (as
+     * old networks often run). Appendix 2.2 and 4 excuse only the final straight piece into the building: by default
+     * the tie-in is moved along the pipe out of the clearance, and the check of the result agrees. With tie-ins
+     * within clearances allowed the route ties in at the end of the pipe, which is only reported; checked by the
+     * default rule that is an error.
+     */
+    @Test
+    void tieInOutsideTheClearanceToTheOwnBuilding() throws Exception {
+        String data = pipeDataset(new double[][]{{23, 120}, {23, 3}});
+        Result strict = plan(data, new PlanParams());
+        Variant v = strict.variants.get(0);
+        assertTrue(v.unconnected.isEmpty(), v.unconnected.toString());
+        assertEquals(Collections.emptyList(), strict.report.errors());
+        double clearance = clearance(v);
+        assertTrue(distanceTo(BUILDING, tieOf(v)) >= clearance - 0.02,
+                "the tie-in is outside the clearance: " + distanceTo(BUILDING, tieOf(v)));
+        assertFalse(strict.report.getViolations().stream().anyMatch(x -> x.getMessage().contains("tie-in itself")));
+
+        PlanParams allowed = new PlanParams();
+        allowed.rules.tieInInClearance = true;
+        Result within = plan(data, allowed);
+        Variant w = within.variants.get(0);
+        assertTrue(w.unconnected.isEmpty(), w.unconnected.toString());
+        assertTrue(distanceTo(BUILDING, tieOf(w)) < clearance(w), "the tie-in at the end of the pipe, within the "
+                + "clearance: " + distanceTo(BUILDING, tieOf(w)));
+        assertEquals(Collections.emptyList(), within.report.errors());
+        assertTrue(within.report.getViolations().stream().anyMatch(x -> x.getSeverity()
+                == ValidationReport.Severity.WARNING && x.getMessage().contains("tie-in itself lies within")),
+                "a tie-in within the clearance is reported");
+        assertTrue(check(within.input, within.output, RuleOptions.defaults()).errors().stream().anyMatch(x ->
+                x.getRule().equals("R-RESTR") && x.getMessage().startsWith("Tie-in is")),
+                "by default a tie-in within the clearance is an error");
+    }
+
+    /**
+     * The same with the pipe from the east ending 3 m south of a neighbour building, south-east of the OKS: the
+     * clearance to it is the same rule.
+     */
+    @Test
+    void tieInOutsideTheClearanceToAnotherBuilding() throws Exception {
+        // 60 m long: the tie-in beyond its clearance is far, the one at the end of the pipe is cheaper even with the
+        // bend of 45° it makes there
+        double[][] neighbour = {{30, -30}, {90, -30}, {90, -10}, {30, -10}, {30, -30}};
+        String data = withBuilding(pipeDataset(new double[][]{{150, -33}, {35, -33}}), "b3", neighbour);
+        Result strict = plan(data, new PlanParams());
+        Variant v = strict.variants.get(0);
+        assertTrue(v.unconnected.isEmpty(), v.unconnected.toString());
+        assertEquals(Collections.emptyList(), strict.report.errors());
+        assertTrue(distanceTo(neighbour, tieOf(v)) >= clearance(v) - 0.02,
+                "the tie-in is outside the clearance: " + distanceTo(neighbour, tieOf(v)));
+
+        PlanParams allowed = new PlanParams();
+        allowed.rules.tieInInClearance = true;
+        Result within = plan(data, allowed);
+        Variant w = within.variants.get(0);
+        assertTrue(distanceTo(neighbour, tieOf(w)) < clearance(w), "the tie-in at the end of the pipe: "
+                + distanceTo(neighbour, tieOf(w)));
+        assertEquals(Collections.emptyList(), within.report.errors());
+        assertTrue(check(within.input, within.output, RuleOptions.defaults()).errors().stream().anyMatch(x ->
+                x.getRule().equals("R-RESTR") && x.getMessage().startsWith("Tie-in is")),
+                "by default a tie-in within the clearance is an error");
+    }
+
+    /**
+     * The whole pipe runs 2 m east of the own building, within the clearance: by default there is no tie-in and the
+     * OKS is left without a route; the reason tells where the tie-in would be and which setting allows it.
+     */
+    @Test
+    void noTieInOutsideTheClearance() throws Exception {
+        String data = pipeDataset(new double[][]{{22, 35}, {22, 5}});
+        Result strict = plan(data, new PlanParams());
+        Unconnected u = strict.variants.get(0).unconnected.get(0);
+        assertEquals(Unconnected.Reason.TIE_IN_IN_CLEARANCE, u.reason);
+        assertTrue(u.detail.contains("в зоне отступа к зданию b1") && u.detail.contains("«Врезка в зоне отступа»"),
+                u.detail);
+        assertEquals(Collections.emptyList(), strict.report.errors());
+
+        PlanParams allowed = new PlanParams();
+        allowed.rules.tieInInClearance = true;
+        Result within = plan(data, allowed);
+        assertTrue(within.variants.get(0).unconnected.isEmpty(), within.variants.get(0).unconnected.toString());
+        assertEquals(Collections.emptyList(), within.report.errors());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static final class Result {
@@ -313,6 +398,38 @@ class BuildingEntryTest {
         }
         fs.add(feature("cp", "oks_connection_point", point(0, 3), ", \"flow_tph\": 5.0"));
         return "{\"type\": \"FeatureCollection\", \"features\": [" + String.join(", ", fs) + "]}";
+    }
+
+    /** The building of the OKS and the connection point; the only existing pipe, fed from its first point. */
+    private static String pipeDataset(double[][] pipe) {
+        List<String> fs = new ArrayList<>();
+        fs.add(feature("src", "source", point(pipe[0][0], pipe[0][1]), ""));
+        fs.add(feature("s1", "heat_network", line(pipe), ", \"diameter\": 300, \"upstream_object_id\": \"src\""));
+        fs.add(feature("b1", "restriction", polygon(BUILDING), ", \"restriction_type\": \"oks\""));
+        fs.add(feature("cp", "oks_connection_point", point(0, 3), ", \"flow_tph\": 5.0"));
+        return "{\"type\": \"FeatureCollection\", \"features\": [" + String.join(", ", fs) + "]}";
+    }
+
+    /** The only tie-in of the variant into the existing network. */
+    private static Coordinate tieOf(Variant v) {
+        assertEquals(1, v.tieIns.size(), "one tie-in");
+        return v.tieIns.get(0).point.getCoordinate();
+    }
+
+    /** Clearance of the pipe of the first segment to a building: 5 m and the half width of the pipe. */
+    private static double clearance(Variant v) {
+        int dn = v.segments.get(0).dn;
+        return TestSupport.REF.buildingDistance(dn) + TestSupport.REF.pipe(dn).getHalfWidthM();
+    }
+
+    /** Distance from a point (UTM) to a polygon given in metres east and north of the origin. */
+    private static double distanceTo(double[][] ring, Coordinate c) {
+        Coordinate o = Crs.toUtm(Crs.WGS84_FACTORY.createPoint(new Coordinate(LON0, LAT0))).getCoordinate();
+        Coordinate[] cs = new Coordinate[ring.length];
+        for (int i = 0; i < ring.length; i++) {
+            cs[i] = new Coordinate(o.x + ring[i][0], o.y + ring[i][1]);
+        }
+        return Crs.UTM_FACTORY.createPolygon(cs).distance(Crs.UTM_FACTORY.createPoint(c));
     }
 
     /** The dataset with one more existing building (a restriction of type oks). */

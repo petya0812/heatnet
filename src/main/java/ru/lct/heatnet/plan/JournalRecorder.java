@@ -92,6 +92,18 @@ final class JournalRecorder {
         return add(log, e);
     }
 
+    /**
+     * A piece laid anew between the same nodes with fewer turns (straightening of the local search): {@code oks} — an OKS
+     * fed through it, {@code straightened} marks the event; the changed edges as in any step.
+     */
+    Map<String, Object> straightened(Log log, String oks, Draft d) {
+        Map<String, Object> e = event("rebuild");
+        e.put("oks", oks);
+        e.put("straightened", true);
+        network(log, e, d);
+        return add(log, e);
+    }
+
     Map<String, Object> unconnected(Log log, InputModel.Oks oks, Unconnected u) {
         Map<String, Object> e = event("unconnected");
         e.put("oks", oks.id);

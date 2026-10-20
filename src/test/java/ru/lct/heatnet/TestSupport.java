@@ -87,6 +87,7 @@ public final class TestSupport {
             params.rules.buildingCrossingK = Double.parseDouble(System.getProperty("buildingK"));
         }
         params.rules.throughOwnParts = Boolean.getBoolean("ownParts");
+        params.rules.tieInInClearance = Boolean.getBoolean("tieInClearance");
         if (System.getProperty("entrySlack") != null) {
             params.rules.entrySlackM = Double.parseDouble(System.getProperty("entrySlack"));
         }

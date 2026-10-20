@@ -340,7 +340,9 @@ function renderCaption(e, st) {
   } else {
     const r = e.route;
     const verb = e.type === 'rebuild' ? 'Перестройка: ОКС ' + e.oks + ' отключён и подключён заново' : 'ОКС ' + e.oks + ' подключён';
-    if (!r) {
+    if (!r && e.straightened) {
+      main = [h('b', null, `Перестройка: участок к ОКС ${e.oks} проложен заново`), ' — между теми же камерами, с меньшим числом поворотов.'];
+    } else if (!r) {
       main = [h('b', null, `Перестройка: сеть пересобрана без ОКС ${e.oks}`), ' — трасса для него не найдена.'];
     } else {
       const alts = (e.alternatives || []).length;

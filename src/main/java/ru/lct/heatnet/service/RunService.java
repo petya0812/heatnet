@@ -221,6 +221,13 @@ public class RunService {
         if (p.turnPenaltyScore != d.turnPenaltyScore) {
             parts.add("штраф за поворот " + num(p.turnPenaltyScore));
         }
+        if (p.oddJointTurns != d.oddJointTurns) {
+            parts.add("стык не «Т» — " + num(p.oddJointTurns) + " пов.");
+        }
+        if (p.shapeWeight != d.shapeWeight) {
+            parts.add(p.shapeWeight == 0 ? "выбор схемы только по S"
+                    : "вес сложности формы при выборе схемы " + num(p.shapeWeight));
+        }
         if (p.rules.existingFlow != d.rules.existingFlow
                 || p.rules.existingFlow == RuleOptions.ExistingFlow.CAPACITY_SHARE
                 && p.rules.existingFlowShare != d.rules.existingFlowShare) {
@@ -241,6 +248,9 @@ public class RunService {
         if (p.rules.throughOwnParts != d.rules.throughOwnParts) {
             parts.add(p.rules.throughOwnParts ? "сквозь отдельные части своего здания"
                     : "без прохода через отдельные части своего здания");
+        }
+        if (p.rules.tieInInClearance != d.rules.tieInInClearance) {
+            parts.add(p.rules.tieInInClearance ? "врезка в зоне отступа" : "врезка только вне зон отступа");
         }
         if (p.entryLegM != d.entryLegM) {
             parts.add("прямой участок от стены не короче " + num(p.entryLegM) + " м");
@@ -503,6 +513,7 @@ public class RunService {
             m.put("routes", v.metrics.routes);
             m.put("turns", v.metrics.turns);
             m.put("turns_per_km", v.metrics.turnsPerKm);
+            m.put("selection_score", v.metrics.selectionScore);
             m.put("small_turns", v.metrics.smallTurns);
             m.put("sharp_turns", v.metrics.sharpTurns);
             m.put("min_straight_m", v.metrics.minStraightM);

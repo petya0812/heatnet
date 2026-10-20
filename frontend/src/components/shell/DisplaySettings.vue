@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger} from 'reka-ui';
+import {PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger} from 'reka-ui';
 import {Settings2, Sun, Moon, Monitor} from 'lucide-vue-next';
 import {anim, resetAnim, reducedMotion, setAnim} from '@/map/anim';
 import {themeMode} from '@/lib/theme';
@@ -18,11 +18,15 @@ const OPTS: {key: 'build' | 'live' | 'transitions' | 'flow'; label: string; hint
 
 <template>
   <PopoverRoot>
-    <UiTooltip content="Вид и анимация" side="bottom">
-      <PopoverTrigger class="inline-flex size-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink data-[state=open]:bg-surface-3" aria-label="Вид и анимация">
-        <Settings2 class="size-[18px]" aria-hidden="true" />
-      </PopoverTrigger>
-    </UiTooltip>
+    <!-- an anchor of its own: inside the tooltip the trigger does not reach the popover as its anchor, and the panel
+         would stay off screen -->
+    <PopoverAnchor class="inline-flex">
+      <UiTooltip content="Вид и анимация" side="bottom">
+        <PopoverTrigger class="inline-flex size-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink data-[state=open]:bg-surface-3" aria-label="Вид и анимация">
+          <Settings2 class="size-[18px]" aria-hidden="true" />
+        </PopoverTrigger>
+      </UiTooltip>
+    </PopoverAnchor>
     <PopoverPortal>
       <PopoverContent :side-offset="10" align="end" :collision-padding="10"
         class="z-[180] w-[330px] rounded-[20px] border border-line bg-surface-solid p-4 shadow-pop data-[state=open]:animate-[fade-up_.14s_ease-out]">

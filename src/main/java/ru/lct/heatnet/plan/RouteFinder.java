@@ -44,18 +44,11 @@ public final class RouteFinder {
     }
 
     private final ReferenceData ref;
-    private final ZoneCache zoneCache = new ZoneCache();
+    private final ZoneCache zoneCache;
     /** Static zones of recent search areas; bounded, the planner comes back to the same OKS many times. */
-    private final Map<String, RoutingContext.Static> sharedCache = new java.util.LinkedHashMap<String,
-            RoutingContext.Static>(64, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RoutingContext.Static> eldest) {
-            return size() > params.contextCache;
-        }
-    };
+    private final Map<String, RoutingContext.Static> sharedCache;
     /** Exits from the building of every OKS (they depend on its outline and connection point only). */
-    private final Map<InputModel.Oks, List<BuildingEntry.Exit>> exitCache =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<InputModel.Oks, List<BuildingEntry.Exit>> exitCache;
     /** Hints why an OKS has no route from its nearest wall, by OKS and DN; empty when there is none. */
     private final Map<String, String> entryHints = new java.util.concurrent.ConcurrentHashMap<>();
     private final PlanParams params;
@@ -67,12 +60,53 @@ public final class RouteFinder {
         this.params = params;
         this.model = model;
         this.obstacles = obstacles;
+        this.zoneCache = new ZoneCache();
+        this.sharedCache = new java.util.LinkedHashMap<String, RoutingContext.Static>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, RoutingContext.Static> eldest) {
+                return size() > params.contextCache;
+            }
+        };
+        this.exitCache = new java.util.concurrent.ConcurrentHashMap<>();
         for (InputModel.Oks o : model.getOks()) {
             if (o.ownBuildingId != null) {
                 oksBuildings.add(o.ownBuildingId);
             }
         }
         crossing = RestrictionRule.crossing(RuleOptions.BUILDING_CROSSING, params.rules.buildingCrossingK);
+    }
+
+    /**
+     * A finder for one sequence of searches (one build of a variant and its local search): the caches that depend only
+     * on the data (zones, static parts of the search areas, exits from buildings) are shared, the hints why an OKS has
+     * no route are its own. A hint is found on the network of the first failed search of that OKS; with a shared cache
+     * which build fails first would depend on the threads, so would the reason reported.
+     */
+    RouteFinder session() {
+        return new RouteFinder(this);
+    }
+
+    /**
+     * Legs evaluated by the searches of this finder so far: the work of a sequence of searches, the same whatever the
+     * threads and caches (a measure for bounding optional moves of the local search without a clock).
+     */
+    private long work;
+
+    long work() {
+        return work;
+    }
+
+    private RouteFinder(RouteFinder base) {
+        this.ref = base.ref;
+        this.params = base.params;
+        this.model = base.model;
+        this.obstacles = base.obstacles;
+        this.zoneCache = base.zoneCache;
+        this.sharedCache = base.sharedCache;
+        this.exitCache = base.exitCache;
+        this.oksBuildings.addAll(base.oksBuildings);
+        this.crossing = base.crossing;
+        this.bannedTieObjects = base.bannedTieObjects;
     }
 
     /** Buildings of the OKS being connected. */
@@ -116,7 +150,8 @@ public final class RouteFinder {
 
     private Route find(InputModel.Oks oks, PipeSpec pipe, List<Built> built, NetworkState state, AttachProvider attach,
                        Diagnostics diag, Unconnected.Failure fail, SearchTrace trace) {
-        Route r = find(oks, entryWalls(oks), pipe, built, state, attach, diag, fail, trace);
+        Ties ties = new Ties(params.rules.tieInInClearance);
+        Route r = find(oks, entryWalls(oks), pipe, built, state, attach, diag, fail, trace, ties);
         if (r == null && params.rules.entry == RuleOptions.Entry.NEAREST
                 && (fail.reason == Unconnected.Reason.NO_ROUTE || fail.reason == Unconnected.Reason.SEARCH_LIMIT
                 || fail.reason == Unconnected.Reason.ENTRY_BLOCKED)) {
@@ -125,7 +160,66 @@ public final class RouteFinder {
                 fail.set(Unconnected.Reason.ENTRY_BLOCKED, hint);
             }
         }
+        if (r == null && ties.closed && (fail.reason == Unconnected.Reason.NO_ROUTE
+                || fail.reason == Unconnected.Reason.SEARCH_LIMIT)) {
+            String hint = tieHint(oks, pipe, built, state, attach);
+            if (hint != null) {
+                fail.set(Unconnected.Reason.TIE_IN_IN_CLEARANCE, hint);
+            }
+        }
         return r;
+    }
+
+    /**
+     * Whether a tie-in into the existing network may lie within the clearance to an object
+     * ({@link RuleOptions#tieInInClearance}), and what one search met of such tie-ins.
+     */
+    private static final class Ties {
+        final boolean inClearance;
+        /** A tie-in point was not taken: it lies within a clearance. */
+        boolean closed;
+        /** Tie-ins taken within clearances, by key: the objects, for the reason of an OKS left without a route. */
+        final Map<String, String> within = new HashMap<>();
+
+        Ties(boolean inClearance) {
+            this.inClearance = inClearance;
+        }
+    }
+
+    /** Hints why an OKS has no route with tie-ins outside the clearances, by OKS and DN; empty when there is none. */
+    private final Map<String, String> tieHints = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Why an OKS left without a route would have one with a tie-in within a clearance: where that tie-in is.
+     * Null when such tie-ins are not the cause.
+     */
+    private String tieHint(InputModel.Oks oks, PipeSpec pipe, List<Built> built, NetworkState state,
+                           AttachProvider attach) {
+        String key = oks.id + '|' + pipe.getDn();
+        String hint = tieHints.get(key);
+        if (hint == null) {
+            Ties allowed = new Ties(true);
+            Route r = find(oks, entryWalls(oks), pipe, built, state, attach, new Diagnostics(),
+                    new Unconnected.Failure(), null, allowed);
+            String where = r == null ? null : allowed.within.get(r.tie.key());
+            hint = where == null ? "" : (r.tie.chamber != null ? "врезка в существующую камеру " + r.tie.chamber.id
+                    : "врезка в участок " + r.tie.segment.id) + " — в зоне отступа к " + where + "; по техническим "
+                    + "требованиям (п. 2.2, разд. 4) отступ действует на всю трассу, кроме прямого участка ввода в "
+                    + "здание. Разрешить такую врезку — настройка «Врезка в зоне отступа»";
+            tieHints.put(key, hint);
+        }
+        return hint.isEmpty() ? null : hint;
+    }
+
+    /** The objects whose clearances contain the point: "зданию 10 (3,2 м от него)". */
+    private static String clearancesText(List<RoutingContext.Zone> zones, Coordinate c) {
+        List<String> out = new ArrayList<>();
+        org.locationtech.jts.geom.Point p = Crs.UTM_FACTORY.createPoint(c);
+        for (RoutingContext.Zone z : zones) {
+            out.add((z.kind.startsWith("oks") || "own_oks".equals(z.kind) ? "зданию " : "ограничению " + z.kind
+                    + " ") + z.objectId + " (" + metres(z.raw.distance(p)) + " м от него)");
+        }
+        return String.join(", ", out);
     }
 
     /** Exits from the building of the OKS, nearest first, as many as {@link PlanParams#entryWalls}. */
@@ -171,7 +265,7 @@ public final class RouteFinder {
         String hint = entryHints.get(key);
         if (hint == null) {
             Route r = find(oks, all.subList(1, all.size()), pipe, built, state, attach, new Diagnostics(),
-                    new Unconnected.Failure(), null);
+                    new Unconnected.Failure(), null, new Ties(params.rules.tieInInClearance));
             hint = "";
             if (r != null) {
                 double nearest = all.get(0).insideM;
@@ -192,7 +286,7 @@ public final class RouteFinder {
 
     private Route find(InputModel.Oks oks, List<BuildingEntry.Exit> walls, PipeSpec pipe, List<Built> built,
                        NetworkState state, AttachProvider attach, Diagnostics diag, Unconnected.Failure fail,
-                       SearchTrace trace) {
+                       SearchTrace trace, Ties ties) {
         Coordinate p = oks.routePoint.getCoordinate();
         fail.set(Unconnected.Reason.NO_ROUTE, null);
         double dNear = model.distanceToNetwork(p);
@@ -205,22 +299,49 @@ public final class RouteFinder {
         for (int attempt = 0; attempt <= params.radiusRetries; attempt++) {
             RoutingContext ctx = context(oks, pipe, built, p, radius);
             double slack = params.corridorSlack * (1 << attempt);
-            // first a route along the directions of the chosen turn angles (tidier trace, fewer states), then — unless
-            // the angles are strict — a free search with any angles up to 90°, which the appendix allows (2.1)
-            // from inside a building: the directions of the wall the route leaves by (it goes out along the normal)
-            Frame frame = params.turnStepDeg <= 0 ? null : walls.isEmpty() ? frameFor(ctx, p)
+            // A route goes along the directions of the chosen turn angles (a tidier trace, fewer states). It leaves its
+            // building along the normal of the wall (the straight piece through the clearance, appendix 2.2) and then
+            // follows the directions of the network piece it is nearest to, so that it meets the pipe at a right angle;
+            // one turn off the directions links the two. The directions of the wall are the other choice (a route
+            // along the facades): the cheaper of the two routes is taken. With strict angles only the directions of
+            // the wall, so that every bend is a standard one. Unless the angles are strict, a free search with any
+            // angles up to 90° (appendix 2.1) is the last resort.
+            Frame own = params.turnStepDeg <= 0 ? null : walls.isEmpty() ? frameFor(ctx, p)
                     : Frame.squareTo(walls.get(0).nx, walls.get(0).ny, params.turnStepDeg);
+            List<Frame> frames = new ArrayList<>();
+            if (own != null) {
+                Frame net = params.turnStepStrict ? null : networkFrame(p, attach);
+                if (net != null && !net.sameAs(own)) {
+                    frames.add(net);
+                }
+                frames.add(own);
+            }
             Route r = null;
-            for (Frame f : frame == null ? java.util.Collections.<Frame>singletonList(null)
-                    : params.turnStepStrict ? java.util.Collections.singletonList(frame)
-                    : java.util.Arrays.asList(frame, null)) {
+            Frame chosen = null;
+            for (int k = 0; k < frames.size(); k++) {
+                Frame f = frames.get(k);
                 if (trace != null) {
                     trace.reset(radius);
                 }
-                r = search(oks, walls, pipe, ctx, state, attach, diag, fail, slack, trace, f);
-                if (r != null) {
-                    break;
+                // the other directions only for a cheaper route: the search stops at the score of the one found
+                double bound = r == null ? Double.POSITIVE_INFINITY : r.preference + r.score - 1e-9;
+                Route x = search(oks, walls, pipe, ctx, state, attach, diag, fail, slack, trace, f, ties, bound);
+                if (x != null && (r == null || x.preference + x.score < r.preference + r.score - 1e-9)) {
+                    r = x;
+                    chosen = f;
                 }
+            }
+            if (r == null && (own == null || !params.turnStepStrict)) {
+                if (trace != null) {
+                    trace.reset(radius);
+                }
+                r = search(oks, walls, pipe, ctx, state, attach, diag, fail, slack, trace, null, ties,
+                        Double.POSITIVE_INFINITY);
+            } else if (r != null && trace != null && chosen != frames.get(frames.size() - 1)) {
+                // the trace shows the search that gave the route
+                trace.reset(radius);
+                r = search(oks, walls, pipe, ctx, state, attach, diag, fail, slack, trace, chosen, ties,
+                        Double.POSITIVE_INFINITY);
             }
             if (r != null) {
                 return r;
@@ -230,7 +351,7 @@ public final class RouteFinder {
             }
             if (fail.reason != Unconnected.Reason.SEARCH_LIMIT) {
                 fail.set(Unconnected.Reason.NO_ROUTE, String.format("радиус поиска %.0f м, ДУ %d, до сети %.0f м%s",
-                        radius, pipe.getDn(), dNear, frame != null && params.turnStepStrict
+                        radius, pipe.getDn(), dNear, own != null && params.turnStepStrict
                                 ? ", повороты только " + PlanParams.turnAnglesText(params.turnStepDeg) : ""));
             }
             if (radius >= params.searchRadiusMaxM) {
@@ -248,7 +369,7 @@ public final class RouteFinder {
         // routes already built for this variant are the only obstacles that change while planning
         for (Built b : built) {
             if (b.line.intersects(area)) {
-                ctx.addForbidden("new:" + b.oksId, "new_route", b.line,
+                ctx.addForbidden("new:" + b.oksId, RoutingContext.NEW_ROUTE, b.line,
                         b.pipe.getHalfWidthM() + params.newRouteClearanceM + pipe.getHalfWidthM());
             }
         }
@@ -271,8 +392,19 @@ public final class RouteFinder {
                 return cached;
             }
         }
-        Geometry loadArea = Crs.UTM_FACTORY.createPoint(p).buffer(radius + params.obstacleMarginM, 16);
         RoutingContext ctx = new RoutingContext(ref, params, pipe, area, zoneCache, null);
+        addStaticObjects(ctx, oks, p, radius);
+        ctx.build();
+        RoutingContext.Static shared = ctx.toStatic();
+        synchronized (sharedCache) {
+            sharedCache.put(key, shared);
+        }
+        return shared;
+    }
+
+    /** Obstacles, other OKS and the existing network around {@code p} as zones and specials of {@code ctx}. */
+    private void addStaticObjects(RoutingContext ctx, InputModel.Oks oks, Coordinate p, double radius) {
+        Geometry loadArea = Crs.UTM_FACTORY.createPoint(p).buffer(radius + params.obstacleMarginM, 16);
         // the own building keeps its clearance (appendix 2.2) except on the leg of the start; with the entry from any
         // point of the outline it keeps none. With throughOwnParts only its main part is an obstacle
         String ownBuilding = oks == null ? null : oks.ownBuildingId;
@@ -284,7 +416,10 @@ public final class RouteFinder {
                 } else if (own == o.getGeometry()) {
                     ctx.addObstacle(o);
                 } else {
-                    ctx.addForbidden(o.getId(), "oks_existing/main", own, ctx.clearanceFor(o));
+                    // the main part depends on the OKS (a building may hold several connection points in different
+                    // parts): the cached zone is that OKS's, never one made for another OKS of the building
+                    ctx.addForbidden(o.getId(), "oks_existing/main", own, ctx.clearanceFor(o),
+                            o.getId() + "/main-of/" + oks.id);
                 }
             } else if (crossable(o)) {
                 ctx.addCrossing(o.getId(), crossing, o.getGeometry());
@@ -303,12 +438,6 @@ public final class RouteFinder {
                 ctx.addExistingNetwork(s);
             }
         }
-        ctx.build();
-        RoutingContext.Static shared = ctx.toStatic();
-        synchronized (sharedCache) {
-            sharedCache.put(key, shared);
-        }
-        return shared;
     }
 
     /** Extra goals of the search: points on the new network of the variant (joint connection). */
@@ -318,6 +447,16 @@ public final class RouteFinder {
 
         /** Distance from a point to the new network (for the search heuristic). */
         double distance(Coordinate v);
+
+        /** Pieces of the new network: {from, to}. */
+        default List<Coordinate[]> pieces() {
+            return Collections.emptyList();
+        }
+
+        /** The piece of the new network nearest to a point: {dx, dy, distance}, or null without one. */
+        default double[] nearestPiece(Coordinate v) {
+            return null;
+        }
     }
 
     private java.util.Set<String> bannedTieObjects = java.util.Collections.emptySet();
@@ -347,6 +486,9 @@ public final class RouteFinder {
         RoutingContext ctx = context(ownOks, pipe, java.util.Collections.<Built>emptyList(), center, radius);
         Coordinate first = coords.get(0);
         Coordinate last = coords.get(coords.size() - 1);
+        if (startsAtTie && !params.rules.tieInInClearance && !ctx.objectClearancesAt(first).isEmpty()) {
+            return null; // with this DN the tie-in lies within a clearance
+        }
         RoutingContext.Endpoint eStart = startsAtTie ? ctx.endpoint(first, ctx.specialsAround(first, 0.05)) : null;
         RoutingContext.Endpoint eEnd = ownOks != null ? ctx.endpoint(last, ctx.specialsAround(last, 0.0)) : null;
         List<RoutingContext.EdgeEval> out = new ArrayList<>();
@@ -365,6 +507,160 @@ public final class RouteFinder {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * A new way for a piece of the new network between its two nodes, for a larger DN (the piece is shared and grew,
+     * the old way no longer keeps the clearances). The same graph and rules as the search of a route: turning points
+     * of the zones around the piece, legs checked by {@link RoutingContext#evaluate} for this DN, turns up to 90°, the
+     * turn penalty; first along the directions of the old piece, then (unless the angles are strict) with any angle.
+     * The nodes stay where they are; at a tie-in the end is excused like the tie-in of a route. {@code built} — the
+     * other new pieces (kept apart like any built route). Null when there is no such way.
+     */
+    List<Coordinate> relay(List<Coordinate> old, PipeSpec pipe, boolean startsAtTie, List<Built> built) {
+        Coordinate a = old.get(0);
+        Coordinate b = old.get(old.size() - 1);
+        double oldLength = 0;
+        double[] longest = null;
+        for (int i = 0; i + 1 < old.size(); i++) {
+            double l = old.get(i).distance(old.get(i + 1));
+            oldLength += l;
+            if (longest == null || l > longest[2]) {
+                longest = new double[]{old.get(i + 1).x - old.get(i).x, old.get(i + 1).y - old.get(i).y, l};
+            }
+        }
+        // the new way may be somewhat longer than the old one: points beyond that ellipse are not used
+        double budget = Math.max(oldLength * RELAY_SLACK, a.distance(b)) + RELAY_MARGIN_M;
+        Coordinate centre = new Coordinate((a.x + b.x) / 2, (a.y + b.y) / 2);
+        RoutingContext ctx = context(null, pipe, built, centre, budget / 2 + RELAY_MARGIN_M);
+        if (startsAtTie && !params.rules.tieInInClearance && !ctx.objectClearancesAt(a).isEmpty()) {
+            return null; // with this DN the tie-in itself lies within a clearance
+        }
+        RoutingContext.Endpoint ea = startsAtTie ? ctx.endpoint(a, ctx.specialsAround(a, 0.05)) : null;
+        List<Coordinate> verts = new ArrayList<>();
+        verts.add(a);
+        verts.add(b);
+        for (Coordinate c : ctx.buildVertices()) {
+            if (c.distance(a) + c.distance(b) <= budget) {
+                verts.add(c);
+            }
+        }
+        if (verts.size() > params.maxVertices) {
+            verts.subList(params.maxVertices, verts.size()).clear();
+        }
+        Frame frame = params.turnStepDeg <= 0 || longest == null ? null
+                : Frame.squareTo(longest[0], longest[1], params.turnStepDeg);
+        List<Coordinate> way = relaySearch(ctx, frame, verts, ea, pipe);
+        if (way == null && frame != null && !params.turnStepStrict) {
+            way = relaySearch(ctx, null, verts, ea, pipe);
+        }
+        return way;
+    }
+
+    /** The new way may be this many times longer than the old one (plus {@link #RELAY_MARGIN_M}). */
+    private static final double RELAY_SLACK = 1.5;
+    private static final double RELAY_MARGIN_M = 30;
+
+    /**
+     * A* from {@code verts[0]} to {@code verts[1]}: a state is a point with the heading of arrival (without directions,
+     * a point with the point it was reached from, so that turns sharper than 90° are never taken).
+     */
+    private List<Coordinate> relaySearch(RoutingContext ctx, Frame frame, List<Coordinate> verts,
+                                         RoutingContext.Endpoint ea, PipeSpec pipe) {
+        int n = verts.size();
+        Coordinate goal = verts.get(1);
+        // headings along the directions; without them the previous point (n — none) plays the part of the heading
+        int hs = frame == null ? n + 1 : frame.headings + 1;
+        double minPerM = ref.scoreOfCost(pipe.getNewCostPerM()) + ref.scoreOfLength(1);
+        Map<Integer, Double> best = new HashMap<>();
+        Map<Integer, Integer> parent = new HashMap<>();
+        Map<Integer, Step> inStep = new HashMap<>();
+        java.util.Set<Integer> closed = new java.util.HashSet<>();
+        java.util.PriorityQueue<double[]> pq = new java.util.PriorityQueue<>(
+                (x, y) -> x[0] != y[0] ? Double.compare(x[0], y[0]) : Double.compare(x[2], y[2]));
+        int start = hs - 1; // the first point, no heading yet
+        best.put(start, 0.0);
+        pq.add(new double[]{goal.distance(verts.get(0)) * minPerM, 0, start});
+        org.locationtech.jts.index.strtree.STRtree index = new org.locationtech.jts.index.strtree.STRtree();
+        for (int i = 0; i < n; i++) {
+            index.insert(new Envelope(verts.get(i)), i);
+        }
+        index.build();
+        Map<Object, Step> cache = new HashMap<>();
+        double radius = frame == null ? params.neighbourRadiusM : params.frameNeighbourRadiusM;
+        int expansions = 0;
+        while (!pq.isEmpty()) {
+            double[] it = pq.poll();
+            int s = (int) it[2];
+            if (closed.contains(s) || it[1] > best.getOrDefault(s, Double.POSITIVE_INFINITY) + 1e-12) {
+                continue;
+            }
+            closed.add(s);
+            int u = s / hs;
+            if (u == 1) {
+                List<Coordinate> way = new ArrayList<>();
+                for (int c = s; parent.containsKey(c); c = parent.get(c)) {
+                    List<Coordinate> pts = inStep.get(c).points;
+                    for (int k = pts.size() - 1; k >= 0; k--) {
+                        way.add(pts.get(k));
+                    }
+                }
+                way.add(verts.get(0));
+                Collections.reverse(way);
+                for (int i = 1; i + 1 < way.size(); i++) {
+                    if (!ref.isAllowedTurn(Planner.deflectionDeg(way.get(i - 1), way.get(i), way.get(i + 1)))) {
+                        return null;
+                    }
+                }
+                return way;
+            }
+            if (++expansions > params.maxExpansions) {
+                return null;
+            }
+            int hin = s % hs;
+            Coordinate cu = verts.get(u);
+            boolean atStart = u == 0;
+            Coordinate prev = frame == null && hin < n ? verts.get(hin) : null;
+            List<Integer> near = neighbours(index, verts, cu, n, radius);
+            for (int w : near) {
+                if (w == u || w == 0) {
+                    continue;
+                }
+                Coordinate cw = verts.get(w);
+                List<Coordinate> mids = ways(frame, cu, cw);
+                for (int m = 0; m < mids.size(); m++) {
+                    Coordinate mid = mids.get(m);
+                    if (shortLeg(cu, mid, cw) || cu.distance(mid == null ? cw : mid) < MIN_STRAIGHT_M) {
+                        continue;
+                    }
+                    if (frame == null && mid != null) {
+                        continue; // without directions every way is one leg
+                    }
+                    Coordinate next = mid == null ? cw : mid;
+                    if (prev != null && !ref.isAllowedTurn(Planner.deflectionDeg(prev, cu, next))) {
+                        continue; // without directions the heading is the previous point: no turn sharper than 90°
+                    }
+                    // the turn at cu is paid by the step (from the heading of arrival; without directions at every
+                    // point but the first, as in the search of a route)
+                    Step e = cachedStep(cache, ((long) u * n + w) << 3 | m, ctx, frame, cu, atStart ? ea : null,
+                            frame == null || hin == hs - 1 ? Frame.FREE : hin, atStart, mid, cw, null, null);
+                    if (e == null) {
+                        continue;
+                    }
+                    int hout = frame == null ? u : e.heading;
+                    int ws = w * hs + hout;
+                    double g = it[1] + e.score;
+                    if (closed.contains(ws) || g >= best.getOrDefault(ws, Double.POSITIVE_INFINITY)) {
+                        continue;
+                    }
+                    best.put(ws, g);
+                    parent.put(ws, s);
+                    inStep.put(ws, e);
+                    pq.add(new double[]{g + cw.distance(goal) * minPerM, g, ws});
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -453,6 +749,31 @@ public final class RouteFinder {
         return out;
     }
 
+    /**
+     * Whether a route of the new network runs through the way out of the building of an OKS: within the clearance kept
+     * between new routes of the straight piece from an allowed wall (as long as {@link #starts} may make it). Such a
+     * route can be what leaves the OKS without a start ({@code ENTRY_BLOCKED}).
+     */
+    boolean blocksEntry(InputModel.Oks oks, PipeSpec pipe, List<Coordinate> route, PipeSpec routePipe) {
+        if (oks.ownBuildingId == null) {
+            return false;
+        }
+        double zone = ref.buildingDistance(pipe.getDn()) + pipe.getHalfWidthM() + params.extraClearanceM
+                + params.simplifyToleranceM + params.vertexOffsetM;
+        double legMax = Math.max(params.entryLegM, zone) + MAX_LEG_EXTRA_M;
+        double apart = routePipe.getHalfWidthM() + params.newRouteClearanceM + pipe.getHalfWidthM()
+                + params.simplifyToleranceM;
+        org.locationtech.jts.geom.LineString line = Crs.UTM_FACTORY.createLineString(route.toArray(new Coordinate[0]));
+        for (BuildingEntry.Exit x : entryWalls(oks)) {
+            org.locationtech.jts.geom.LineString leg = Crs.UTM_FACTORY.createLineString(
+                    new Coordinate[]{x.c, x.out(legMax)});
+            if (line.isWithinDistance(leg, apart)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The straight piece out of the building is made longer by this step when its end is still in a clearance. */
     private static final double LEG_STEP_M = 0.5;
     /** At most this much longer than the clearance of the building, metres. */
@@ -476,7 +797,7 @@ public final class RouteFinder {
         if (!ref.isAllowedTurn(defl)) {
             return -1;
         }
-        return defl < MIN_TURN_DEG ? 0 : params.turnPenaltyScore;
+        return defl <= ref.getStraightDeg() ? 0 : params.turnPenaltyScore;
     }
 
     /** A step from a start with the turn from the way out of the building; null if that turn is not allowed. */
@@ -520,6 +841,157 @@ public final class RouteFinder {
     private static final Step BLOCKED = new Step(Collections.<Coordinate>emptyList(),
             Collections.<RoutingContext.EdgeEval>emptyList(), 0, Frame.FREE);
 
+    /**
+     * Directions of the network piece nearest to the connection point: of the new network of the variant or of the
+     * existing network fed from the source, whichever is nearer. Null when there is none.
+     */
+    private Frame networkFrame(Coordinate p, AttachProvider attach) {
+        double best = Double.POSITIVE_INFINITY;
+        double[] dir = null;
+        if (attach != null) {
+            double[] d = attach.nearestPiece(p);
+            if (d != null) {
+                best = d[2];
+                dir = d;
+            }
+        }
+        double dn = model.distanceToNetwork(p);
+        if (Double.isFinite(dn) && dn < best) {
+            Envelope env = new Envelope(p);
+            env.expandBy(dn + 1);
+            for (InputModel.Segment s : model.segmentsNear(env)) {
+                if (!model.isAttached(s.id)) {
+                    continue;
+                }
+                Coordinate[] cs = s.line.getCoordinates();
+                for (int i = 0; i + 1 < cs.length; i++) {
+                    double d = org.locationtech.jts.algorithm.Distance.pointToSegment(p, cs[i], cs[i + 1]);
+                    if (d < best && cs[i].distance(cs[i + 1]) >= MIN_STRAIGHT_M) {
+                        best = d;
+                        dir = new double[]{cs[i + 1].x - cs[i].x, cs[i + 1].y - cs[i].y, d};
+                    }
+                }
+            }
+        }
+        return dir == null ? null : Frame.squareTo(dir[0], dir[1], params.turnStepDeg);
+    }
+
+    /**
+     * Score of joining a pipe at {@code tie} by a last leg coming from {@code from}. Where the pipe goes on both ways
+     * (inside a piece, at a bend, at a junction): nothing for a T — every direction of the pipe at the point is at
+     * 90° to the branch or opposite to it (inside a piece the branch is at 90°, at a bend it goes straight on from one
+     * piece and at 90° to the other); otherwise two turns, as the branch makes an odd angle with both ways of the pipe.
+     * At the end of a pipe the route goes on along it: a bend like any other — nothing straight on, one turn up to
+     * 90°, two for a sharper one. With strict angles a joint that is not a T, or a bend off the standard angles, is not
+     * allowed: -1.
+     */
+    double junctionScore(TieOption tie, Coordinate from, Frame frame) {
+        if (tie.pipeDirs == null) {
+            return 0;
+        }
+        double bx = from.x - tie.point.x;
+        double by = from.y - tie.point.y;
+        double bl = Math.hypot(bx, by);
+        if (bl < 1e-9) {
+            return 0;
+        }
+        double tol = ref.getStraightDeg();
+        boolean strict = frame != null && params.turnStepStrict;
+        if (tie.pipeDirs.length == 1) {
+            double[] d = tie.pipeDirs[0];
+            double bend = 180 - angleDeg(bx, by, d[0], d[1]);
+            if (bend <= tol) {
+                return 0;
+            }
+            if (strict) {
+                double r = bend % frame.stepDeg;
+                return Math.min(r, frame.stepDeg - r) <= tol && bend <= 90 + tol ? params.turnPenaltyScore : -1;
+            }
+            return bend <= 90 + tol ? params.turnPenaltyScore : params.oddJointTurns * params.turnPenaltyScore;
+        }
+        boolean t = true;
+        for (double[] d : tie.pipeDirs) {
+            if (Math.hypot(d[0], d[1]) < 1e-9) {
+                continue;
+            }
+            double a = angleDeg(bx, by, d[0], d[1]);
+            t &= Math.abs(a - 90) <= tol || a >= 180 - tol;
+        }
+        if (t) {
+            return 0;
+        }
+        return strict ? -1 : params.oddJointTurns * params.turnPenaltyScore;
+    }
+
+    /** Angle between two directions, degrees (0 — the same way). */
+    private static double angleDeg(double ux, double uy, double vx, double vy) {
+        double cos = (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy));
+        return Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, cos))));
+    }
+
+    /**
+     * Where a goal of a search along {@code frame} may join at no cost (for the bound of the remaining cost): pieces of
+     * pipes in the area that run along the directions (a T or straight on from the end of a pipe is possible only at
+     * them) and existing chambers with a free branch (they take any angle), as {from, to}. Elsewhere a joint costs two
+     * turns, at the end of an existing pipe one ({@code pipeEnds} gets the ends). Null without directions: then any
+     * joint may be a T.
+     */
+    private List<Coordinate[]> freeJoints(Frame frame, RoutingContext ctx, AttachProvider attach, NetworkState state,
+                                          List<Coordinate[]> pipeEnds) {
+        if (frame == null) {
+            return null;
+        }
+        List<Coordinate[]> out = new ArrayList<>();
+        Envelope area = ctx.getArea().getEnvelopeInternal();
+        Coordinate c = area.centre();
+        double radius = Math.max(area.getWidth(), area.getHeight()) / 2;
+        for (InputModel.Chamber ch : model.chambersNear(c, radius)) {
+            if (state.freeBranches(ch) > 0 && model.isAttached(ch.id)) {
+                Coordinate p = ch.point.getCoordinate();
+                out.add(new Coordinate[]{p, p});
+            }
+        }
+        for (InputModel.Segment s : model.segmentsNear(area)) {
+            Coordinate[] cs = s.line.getCoordinates();
+            for (int i = 0; i + 1 < cs.length; i++) {
+                if (alongFrame(frame, cs[i], cs[i + 1])) {
+                    out.add(new Coordinate[]{cs[i], cs[i + 1]});
+                }
+            }
+            pipeEnds.add(new Coordinate[]{cs[0], cs[0]});
+            pipeEnds.add(new Coordinate[]{cs[cs.length - 1], cs[cs.length - 1]});
+        }
+        if (attach != null) {
+            for (Coordinate[] pc : attach.pieces()) {
+                if (alongFrame(frame, pc[0], pc[1])) {
+                    out.add(pc);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Distance from a point to the nearest of the pieces. */
+    private static double nearest(Coordinate v, List<Coordinate[]> pieces) {
+        double best = Double.POSITIVE_INFINITY;
+        for (Coordinate[] f : pieces) {
+            best = Math.min(best, org.locationtech.jts.algorithm.Distance.pointToSegment(v, f[0], f[1]));
+        }
+        return best;
+    }
+
+    /** Whether a piece runs along one of the directions (within the straight tolerance). */
+    private boolean alongFrame(Frame frame, Coordinate a, Coordinate b) {
+        double dx = b.x - a.x;
+        double dy = b.y - a.y;
+        if (Math.hypot(dx, dy) < 1e-9) {
+            return false;
+        }
+        double d = Math.toDegrees(Math.atan2(dy, dx) - frame.phi);
+        double r = ((d % frame.stepDeg) + frame.stepDeg) % frame.stepDeg;
+        return Math.min(r, frame.stepDeg - r) <= ref.getStraightDeg();
+    }
+
     /** Directions of the search around the connection point: outlines of obstacles and of the network. */
     private Frame frameFor(RoutingContext ctx, Coordinate p) {
         List<Geometry> outlines = new ArrayList<>();
@@ -549,7 +1021,7 @@ public final class RouteFinder {
 
     private Route search(InputModel.Oks oks, List<BuildingEntry.Exit> walls, PipeSpec pipe, RoutingContext ctx,
                          NetworkState state, AttachProvider attach, Diagnostics diag, Unconnected.Failure fail,
-                         double slack, SearchTrace trace, Frame frame) {
+                         double slack, SearchTrace trace, Frame frame, Ties ties, double bound) {
         Coordinate p = oks.routePoint.getCoordinate();
         // where the route may leave the building, in the order of preference; the piece inside the building and the
         // leg out of it are paid for by the starting cost
@@ -627,13 +1099,24 @@ public final class RouteFinder {
         // Joining the new network costs at least a chamber; a tie-in costs at least the tie-in itself.
         double goalMin = attach == null ? ref.scoreOfCost(ref.getTieInCost())
                 : ref.scoreOfCost(Math.min(ref.getTieInCost(), ref.chamberCost(pipe.getDn())));
+        // the joint with a pipe is part of a goal: only at a pipe along the directions or an existing chamber can it
+        // cost nothing, any other goal costs at least one turn
+        List<Coordinate[]> pipeEnds = new ArrayList<>();
+        List<Coordinate[]> freeJoints = freeJoints(frame, ctx, attach, state, pipeEnds);
         double[] h = new double[n];
         for (int i = 0; i < n; i++) {
-            double d = model.distanceToNetwork(verts.get(i));
+            Coordinate v = verts.get(i);
+            double d = model.distanceToNetwork(v);
             if (attach != null) {
-                d = Math.min(d, attach.distance(verts.get(i)));
+                d = Math.min(d, attach.distance(v));
             }
-            h[i] = d * minPerM + goalMin;
+            double rest = d * minPerM;
+            if (freeJoints != null) {
+                rest = Math.min(rest + params.oddJointTurns * params.turnPenaltyScore,
+                        Math.min(nearest(v, pipeEnds) * minPerM + params.turnPenaltyScore,
+                                nearest(v, freeJoints) * minPerM));
+            }
+            h[i] = rest + goalMin;
         }
         // index of the turning points: a step of the search looks only at the neighbours of the current point
         org.locationtech.jts.index.strtree.STRtree vertexIndex = new org.locationtech.jts.index.strtree.STRtree();
@@ -666,7 +1149,8 @@ public final class RouteFinder {
         Moves[] movesOf = new Moves[n];
         // the neighbours of a point are the same for every heading it is reached with
         List<List<Integer>> neighboursOf = new ArrayList<>(Collections.<List<Integer>>nCopies(n, null));
-        double bestGoal = Double.POSITIVE_INFINITY;
+        // routes not cheaper than the bound are not looked for
+        double bestGoal = bound;
         int expansions = 0;
         while (!pq.isEmpty()) {
             int it = pq.pop();
@@ -681,7 +1165,7 @@ public final class RouteFinder {
             if (itTie != null) {
                 if (!pending) {
                     Route r = buildRoute(oks, pipe, verts, hs, parent, inStep, itTie, from, (Step) payload,
-                            pq.g[it], ctx, startEps, starts, frame);
+                            pq.g[it], ctx, startEps, starts, frame, ties);
                     if (r == null) {
                         // the route has a turn sharper than 90° that straightening could not remove: this goal
                         // is not usable, the search goes on
@@ -698,13 +1182,13 @@ public final class RouteFinder {
                     }
                     return r;
                 }
-                // the end at a goal depends on the goal only
+                // the end at a goal depends on the goal only; its effect on ties is the same every time
                 GoalKey gk = new GoalKey(itTie);
                 RoutingContext.Endpoint et;
                 if (goalEnds.containsKey(gk)) {
                     et = goalEnds.get(gk);
                 } else {
-                    et = goalEndpoint(ctx, itTie);
+                    et = goalEndpoint(ctx, itTie, ties);
                     goalEnds.put(gk, et);
                 }
                 if (et == null) {
@@ -719,7 +1203,9 @@ public final class RouteFinder {
                     e = fromStart(e, starts.get(fv), verts.get(fv), pd.mid == null ? itTie.point : pd.mid);
                 }
                 if (e != null) {
-                    double total = g[from] + e.score + itTie.terminalScore;
+                    // the goal was queued only with an allowed joint (its score is not negative)
+                    double total = g[from] + e.score + itTie.terminalScore
+                            + junctionScore(itTie, pd.mid == null ? verts.get(fv) : pd.mid, frame);
                     if (reached != null) {
                         Route.Alternative prev = reached.get(itTie.key());
                         if (prev == null || total < prev.score) {
@@ -786,7 +1272,7 @@ public final class RouteFinder {
             Start start = atStart && from < 0 ? starts.get(uv) : null;
             List<TieOption> goals = goalsOf.get(uv);
             if (goals == null) {
-                goals = new ArrayList<>(tieOptions(cu, pipe, oks.flowTph, state, chainMemo, frame));
+                goals = new ArrayList<>(tieOptions(cu, pipe, oks.flowTph, state, chainMemo, frame, ctx, ties));
                 if (attach != null) {
                     goals.addAll(attach.attachOptions(cu, pipe, oks.flowTph));
                 }
@@ -810,7 +1296,11 @@ public final class RouteFinder {
                         }
                         turn += out;
                     }
-                    double lower = g[u] + turn + wayLength(cu, mid, tie.point) * minPerM + tie.terminalScore;
+                    double joint = junctionScore(tie, mid == null ? cu : mid, frame);
+                    if (joint < 0) {
+                        continue;
+                    }
+                    double lower = g[u] + turn + wayLength(cu, mid, tie.point) * minPerM + tie.terminalScore + joint;
                     if (lower < bestGoal) {
                         pq.push(lower, -1, u, tie, new Pending(mid, m), lower);
                     }
@@ -1030,6 +1520,7 @@ public final class RouteFinder {
             return null;
         }
         Coordinate end1 = mid == null ? b : mid;
+        work++;
         RoutingContext.EdgeEval e1 = ctx.evaluate(a, end1, ea, mid == null ? eb : null);
         if (!e1.valid) {
             if (trace != null) {
@@ -1041,6 +1532,7 @@ public final class RouteFinder {
         if (mid == null) {
             return new Step(Collections.singletonList(b), Collections.singletonList(e1), turn + e1.score, last);
         }
+        work++;
         RoutingContext.EdgeEval e2 = ctx.evaluate(mid, b, null, eb);
         if (!e2.valid) {
             if (trace != null) {
@@ -1180,10 +1672,11 @@ public final class RouteFinder {
 
     /**
      * Tie-in candidates near a vertex: the nearest point of every segment and, with directions, the point where
-     * the direction closest to the segment meets it (reached by one straight leg).
+     * the direction closest to the segment meets it (reached by one straight leg). Unless tie-ins may lie within
+     * clearances, a point within the clearance to an object is moved along the segment just beyond it, both ways.
      */
-    List<TieOption> tieOptions(Coordinate v, PipeSpec pipe, double flow, NetworkState state,
-                               Map<String, Double> chainMemo, Frame frame) {
+    private List<TieOption> tieOptions(Coordinate v, PipeSpec pipe, double flow, NetworkState state,
+                                       Map<String, Double> chainMemo, Frame frame, RoutingContext ctx, Ties ties) {
         double dNear = model.distanceToNetwork(v);
         double reach = dNear + params.tieSearchSlackM;
         Envelope env = new Envelope(v);
@@ -1197,14 +1690,14 @@ public final class RouteFinder {
             double t = lil.project(v);
             Coordinate q = lil.extractPoint(t);
             if (q.distance(v) <= reach) {
-                addTiePoint(out, s, t, q, pipe, flow, state, chainMemo);
+                addTiePoints(out, s, lil, t, pipe, flow, state, chainMemo, ctx, ties);
             }
             if (frame != null) {
                 double[] ray = alongDirection(frame, v, s.line);
                 if (ray != null && ray[1] <= reach) {
                     Coordinate qr = lil.extractPoint(ray[0]);
                     if (qr.distance(q) > 0.5) {
-                        addTiePoint(out, s, ray[0], qr, pipe, flow, state, chainMemo);
+                        addTiePoints(out, s, lil, ray[0], pipe, flow, state, chainMemo, ctx, ties);
                     }
                 }
             }
@@ -1222,6 +1715,19 @@ public final class RouteFinder {
             }
         }
         return res;
+    }
+
+    /** The tie-in at {@code t} of the segment, or the ones just beyond the clearance it lies within. */
+    private void addTiePoints(Map<String, TieOption> out, InputModel.Segment s, LengthIndexedLine lil, double t,
+                              PipeSpec pipe, double flow, NetworkState state, Map<String, Double> chainMemo,
+                              RoutingContext ctx, Ties ties) {
+        double[] at = ties.inClearance ? new double[]{t} : ctx.outsideObjectClearances(s, t);
+        if (at.length != 1 || at[0] != t) {
+            ties.closed = true; // the point lies within a clearance: moved out of it, or none is left on the segment
+        }
+        for (double a : at) {
+            addTiePoint(out, s, a, lil.extractPoint(a), pipe, flow, state, chainMemo);
+        }
     }
 
     private void addTiePoint(Map<String, TieOption> out, InputModel.Segment s, double t, Coordinate q, PipeSpec pipe,
@@ -1291,8 +1797,42 @@ public final class RouteFinder {
         // attachment, no separate tie-in is charged (appendix 2.4, 3.2)
         int chamberDn = Math.max(pipe.getDn(), s.dn);
         double score = ref.scoreOfCost(ref.chamberCost(chamberDn));
-        return new TieOption(q, null, s, t, score);
+        TieOption o = new TieOption(q, null, s, t, score);
+        o.pipeDirs = pipeDirsAt(s, t, q);
+        o.place = model.placeOf(s, q, PLACE_TOL_M);
+        return o;
     }
+
+    /**
+     * Directions of the existing network at a point of a segment, away from it: of this segment and, at its end, of
+     * the segments that go on from there.
+     */
+    private double[][] pipeDirsAt(InputModel.Segment s, double t, Coordinate q) {
+        double[][] own = TieOption.dirsAt(java.util.Arrays.asList(s.line.getCoordinates()), t);
+        if (own == null || own.length != 1) {
+            return own;
+        }
+        List<double[]> out = new ArrayList<>(Arrays.asList(own));
+        Envelope env = new Envelope(q);
+        env.expandBy(0.01);
+        for (InputModel.Segment o : model.segmentsNear(env)) {
+            if (o == s || !model.isAttached(o.id)) {
+                continue;
+            }
+            LengthIndexedLine lil = new LengthIndexedLine(o.line);
+            double to = lil.project(q);
+            if (lil.extractPoint(to).distance(q) <= 0.01) {
+                double[][] d = TieOption.dirsAt(java.util.Arrays.asList(o.line.getCoordinates()), to);
+                if (d != null) {
+                    out.addAll(Arrays.asList(d));
+                }
+            }
+        }
+        return out.toArray(new double[0][]);
+    }
+
+    /** Points of the network closer than this are one place of attachment (the check of the result uses 0.05 m). */
+    private static final double PLACE_TOL_M = 0.05;
 
     private TieOption chamberOption(InputModel.Chamber c, PipeSpec pipe, double flow, NetworkState state,
                                     Map<String, Double> chainMemo) {
@@ -1302,8 +1842,11 @@ public final class RouteFinder {
         return new TieOption(c.point.getCoordinate(), c, null, 0, score);
     }
 
-    /** Endpoint description of a goal, or null if the goal point itself is not allowed. */
-    private RoutingContext.Endpoint goalEndpoint(RoutingContext ctx, TieOption goal) {
+    /**
+     * Endpoint description of a goal, or null if the goal point itself is not allowed: a tie-in into the existing
+     * network within the clearance to an object, unless such tie-ins are allowed.
+     */
+    private RoutingContext.Endpoint goalEndpoint(RoutingContext ctx, TieOption goal, Ties ties) {
         if (goal.isAttach()) {
             // a branching chamber respects all clearances and corridors; only the new network may be touched.
             // The corridors are those of the network being joined (its DN may be larger than the one searched for):
@@ -1314,14 +1857,25 @@ public final class RouteFinder {
                 return null;
             }
             RoutingContext.Endpoint et = ctx.endpoint(goal.point, null);
-            et.escapedZones.removeIf(z -> !"new_route".equals(z.kind));
+            et.escapedZones.removeIf(z -> !RoutingContext.NEW_ROUTE.equals(z.kind));
             et.mayTouchCorridors = false;
             return et;
+        }
+        List<RoutingContext.Zone> within = ctx.objectClearancesAt(goal.point);
+        if (!within.isEmpty()) {
+            if (!ties.inClearance) {
+                ties.closed = true;
+                return null;
+            }
+            ties.within.put(goal.key(), clearancesText(within, goal.point));
         }
         return ctx.endpoint(goal.point, ctx.specialsAround(goal.point, 0.05));
     }
 
-    /** What {@link #goalEndpoint} depends on: the point of the goal, whether it joins the new network, its DN. */
+    /**
+     * What {@link #goalEndpoint} depends on: the point of the goal, whether it joins the new network, its DN; and the
+     * key of the goal, under which it notes a tie-in within a clearance.
+     */
     private static final class GoalKey {
         final String key;
         final long x;
@@ -1364,7 +1918,7 @@ public final class RouteFinder {
     private Route buildRoute(InputModel.Oks oks, PipeSpec pipe, List<Coordinate> verts, int hs, int[] parent,
                              Step[] inStep, TieOption goalTie, int goalFrom, Step goalStep, double total,
                              RoutingContext ctx, RoutingContext.Endpoint[] startEps, List<Start> starts,
-                             Frame frame) {
+                             Frame frame, Ties ties) {
         // steps from the goal back to the start, then the route in the search direction: start ... goal
         List<Step> steps = new ArrayList<>();
         steps.add(goalStep);
@@ -1393,7 +1947,7 @@ public final class RouteFinder {
             edges.add(flip(pathEdges.get(k)));
         }
         RoutingContext.Endpoint startEp = startVertex < startEps.length ? startEps[startVertex] : null;
-        RoutingContext.Endpoint goalEp = goalEndpoint(ctx, goalTie);
+        RoutingContext.Endpoint goalEp = goalEndpoint(ctx, goalTie, ties);
         // straighten: drop turning points that are not worth keeping where the direct edge is allowed; along the
         // directions only straight-on points go (anything else would break the standard bends)
         for (int i = 1; i + 1 < fwd.size(); ) {
@@ -1417,6 +1971,9 @@ public final class RouteFinder {
             i++;
         }
         Start start = starts.get(startVertex);
+        if (frame != null) {
+            total += cutShapes(fwd, edges, frame, ctx, pipe, goalTie, goalEp, startEp, beyondStart(oks, start));
+        }
         if (start.leg != null) {
             // the leg out of the building ends the route at the wall; a route that goes on straight from the leg
             // has no turning point at its end
@@ -1441,7 +1998,156 @@ public final class RouteFinder {
                 return null;
             }
         }
-        return new Route(oks, pipe, goalTie, fwd, edges, total - start.preference);
+        Route route = new Route(oks, pipe, goalTie, fwd, edges, total - start.preference);
+        route.preference = start.preference;
+        return route;
+    }
+
+    /**
+     * The point the route goes on to after its start (the last point of the found polyline): the wall at the end of
+     * the straight piece out of the building, a point inside the building along the normal when the route starts
+     * right at the wall, the connection point inside the building for a start on its outline; null when the route
+     * ends at its connection point. The turn there is a turn of the route like any other.
+     */
+    private static Coordinate beyondStart(InputModel.Oks oks, Start start) {
+        if (start.exit != null) {
+            return start.leg != null ? new Coordinate(start.exit.c)
+                    : new Coordinate(start.exit.c.x - start.exit.nx, start.exit.c.y - start.exit.ny);
+        }
+        Coordinate cp = oks.connectionPoint.getCoordinate();
+        return oks.connectionInside() && start.c.distance(cp) > 1e-6 ? new Coordinate(cp) : null;
+    }
+
+    /** Most passes of {@link #cutShapes} over one route (each takes one shortening). */
+    private static final int MAX_CUTS = 50;
+    /**
+     * Longest part of a route {@link #cutShapes} replaces, pieces: a U and a staircase are local (three and four
+     * pieces); the search itself has found the way as a whole.
+     */
+    private static final int MAX_CUT_PIECES = 4;
+
+    /**
+     * Shapes of a found route cut short along the directions. Turning points of the search are only corners of the
+     * zones and one point between two of them, so a route that needs two turns in a row away from the corners goes
+     * round by a far corner (a U), or steps where one turn would do. Here every part fwd[i..j] of the route (from the
+     * goal to the start) of up to {@link #MAX_CUT_PIECES} pieces is replaced by one or two legs along the directions when they pass the same checks as the
+     * search (clearances, special sections, turns up to 90°, legs not shorter than the minimum, the joint with the
+     * pipe) and the route gets cheaper — or as cheap with fewer points. The straight piece out of the building is not
+     * a part of {@code fwd} and stays as it is; the turn after it is counted and checked. Returns the change of the
+     * score (not positive).
+     */
+    double cutShapes(List<Coordinate> fwd, List<RoutingContext.EdgeEval> edges, Frame frame,
+                             RoutingContext ctx, PipeSpec pipe, TieOption goalTie, RoutingContext.Endpoint goalEp,
+                             RoutingContext.Endpoint startEp, Coordinate beyond) {
+        double minPerM = ref.scoreOfCost(pipe.getNewCostPerM()) + ref.scoreOfLength(1);
+        double change = 0;
+        // the pieces checked once: the points of the route stay where they are from pass to pass
+        Map<RoutingContext.EdgeKey, RoutingContext.EdgeEval> checked = new HashMap<>();
+        for (int pass = 0; pass < MAX_CUTS; pass++) {
+            boolean cut = false;
+            outer:
+            for (int i = 0; i + 2 < fwd.size(); i++) {
+                for (int j = Math.min(fwd.size() - 1, i + MAX_CUT_PIECES); j >= i + 2; j--) {
+                    double old = partScore(fwd, i, j, beyond, goalTie, frame);
+                    for (int k = i; k < j; k++) {
+                        old += edges.get(k).score;
+                    }
+                    Coordinate a = fwd.get(i);
+                    Coordinate b = fwd.get(j);
+                    for (Coordinate mid : frame.mids(a, b)) {
+                        if (mid != null && (a.distance(mid) < params.minLegM || mid.distance(b) < params.minLegM)) {
+                            continue;
+                        }
+                        List<Coordinate> cand = new ArrayList<>(fwd.size());
+                        cand.addAll(fwd.subList(0, i + 1));
+                        if (mid != null) {
+                            cand.add(mid);
+                        }
+                        cand.addAll(fwd.subList(j, fwd.size()));
+                        int nj = i + (mid == null ? 1 : 2);
+                        double score = partScore(cand, i, nj, beyond, goalTie, frame);
+                        if (score < 0) {
+                            continue; // a turn sharper than 90° or a joint not allowed
+                        }
+                        double bound = score + (a.distance(mid == null ? b : mid) + (mid == null ? 0 : mid.distance(b)))
+                                * minPerM;
+                        boolean fewer = cand.size() < fwd.size();
+                        if (bound > old + 1e-9 || bound > old - 1e-9 && !fewer) {
+                            continue;
+                        }
+                        List<RoutingContext.EdgeEval> ne = new ArrayList<>(2);
+                        boolean ok = true;
+                        for (int k = i; k < nj && ok; k++) {
+                            final int kk = k;
+                            RoutingContext.EdgeEval e = checked.computeIfAbsent(
+                                    new RoutingContext.EdgeKey(cand.get(k), cand.get(k + 1)),
+                                    key -> ctx.evaluate(cand.get(kk), cand.get(kk + 1), kk == 0 ? goalEp : null,
+                                            kk + 1 == cand.size() - 1 ? startEp : null));
+                            ok = e.valid;
+                            score += e.score;
+                            ne.add(e);
+                        }
+                        if (!ok || score > old + 1e-9 || score > old - 1e-9 && !fewer || !simple(cand, beyond)) {
+                            continue;
+                        }
+                        List<RoutingContext.EdgeEval> nedges = new ArrayList<>(edges.size());
+                        nedges.addAll(edges.subList(0, i));
+                        nedges.addAll(ne);
+                        nedges.addAll(edges.subList(j, edges.size()));
+                        fwd.clear();
+                        fwd.addAll(cand);
+                        edges.clear();
+                        edges.addAll(nedges);
+                        change += score - old;
+                        cut = true;
+                        break outer;
+                    }
+                }
+            }
+            if (!cut) {
+                break;
+            }
+        }
+        return change;
+    }
+
+    /**
+     * Score of the turns at the points i..j of a route (the last one turns to {@code beyond}) and of its joint with
+     * the pipe when i is the goal; -1 when a turn is sharper than 90° or the joint is not allowed.
+     */
+    private double partScore(List<Coordinate> c, int i, int j, Coordinate beyond, TieOption goalTie, Frame frame) {
+        double s = 0;
+        if (i == 0) {
+            double joint = junctionScore(goalTie, c.get(1), frame);
+            if (joint < 0) {
+                return -1;
+            }
+            s += joint;
+        }
+        int last = c.size() - 1;
+        for (int k = Math.max(1, i); k <= j; k++) {
+            Coordinate next = k < last ? c.get(k + 1) : beyond;
+            if (next == null) {
+                continue;
+            }
+            double d = Planner.deflectionDeg(c.get(k - 1), c.get(k), next);
+            if (!ref.isAllowedTurn(d)) {
+                return -1;
+            }
+            if (d > ref.getStraightDeg()) {
+                s += params.turnPenaltyScore;
+            }
+        }
+        return s;
+    }
+
+    /** Whether a route (and the piece to the point beyond its start) does not cross itself. */
+    private static boolean simple(List<Coordinate> c, Coordinate beyond) {
+        List<Coordinate> all = new ArrayList<>(c);
+        if (beyond != null) {
+            all.add(beyond);
+        }
+        return Crs.UTM_FACTORY.createLineString(all.toArray(new Coordinate[0])).isSimple();
     }
 
     private static RoutingContext.EdgeEval flip(RoutingContext.EdgeEval e) {

@@ -11,6 +11,7 @@ import ru.lct.heatnet.reference.PipeSpec;
 import ru.lct.heatnet.reference.ReferenceData;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -104,7 +105,11 @@ public final class Planner {
         final Map<String, Unconnected> unconnected;
         final String strategy;
         String explanation;
+        /** Score S of the variant (appendix 6) and the score the schemes are compared by (S with the shape). */
         final double score;
+        final double sel;
+        /** Turns plus odd joints in turns ({@link Variant.Metrics#shapeTurns}, {@link Variant.Metrics#oddJoints}). */
+        final double shape;
         /** Construction journal (null unless recorded) and the name of the build it belongs to. */
         final JournalRecorder.Log log;
         final String build;
@@ -112,16 +117,18 @@ public final class Planner {
         Candidate(Draft draft, Map<String, Unconnected> unconnected, String strategy, String explanation,
                   InputModel model, JournalRecorder.Log log, String build) {
             this(draft, unconnected, strategy, explanation,
-                    assemble(model, draft, unconnected, TRIAL, new Diagnostics()).summary.score, log, build);
+                    assemble(model, draft, unconnected, TRIAL, new Diagnostics()), log, build);
         }
 
         Candidate(Draft draft, Map<String, Unconnected> unconnected, String strategy, String explanation,
-                  double score, JournalRecorder.Log log, String build) {
+                  Variant trial, JournalRecorder.Log log, String build) {
             this.draft = draft;
             this.unconnected = unconnected;
             this.strategy = strategy;
             this.explanation = explanation;
-            this.score = score;
+            this.score = trial.summary.score;
+            this.sel = trial.metrics.selectionScore;
+            this.shape = trial.metrics.shapeTurns + params.oddJointTurns * trial.metrics.oddJoints;
             this.log = log;
             this.build = build;
         }
@@ -134,6 +141,7 @@ public final class Planner {
                 e.put("strategy", strategy);
                 e.put("explanation", explanation);
                 e.put("score", score);
+                e.put("selection_score", sel);
                 e.put("unconnected", unconnected.size());
                 journalListener.event(build, e);
             }
@@ -160,17 +168,25 @@ public final class Planner {
         Candidate sep;
         Candidate improved;
         try {
-            // independent builds in parallel: the separate connection and three orders of joint connection
-            java.util.concurrent.Future<Candidate> fSep = pool.submit(() -> build(model, finder, recorder, near, false,
-                    diag, STRATEGY_SEPARATE, "Раздельное подключение: каждый ОКС своей трассой и своей врезкой",
+            // independent builds in parallel: the separate connection and three orders of joint connection. Every
+            // build with its local search has a finder of its own (shared data caches, own hints of failed searches),
+            // so the result does not depend on the number of threads or the order they run in
+            RouteFinder fSepFinder = finder.session();
+            java.util.concurrent.Future<Candidate> fSep = pool.submit(() -> build(model, fSepFinder, recorder, near,
+                    false, diag, STRATEGY_SEPARATE, "Раздельное подключение: каждый ОКС своей трассой и своей врезкой",
                     "separate"));
             List<java.util.concurrent.Future<Candidate>> fJoint = new ArrayList<>();
+            List<RouteFinder> sessions = new ArrayList<>();
             if (params.jointConnection) {
-                fJoint.add(pool.submit(() -> build(model, finder, recorder, near, true, quiet, STRATEGY_JOINT,
+                RouteFinder fNear = finder.session();
+                RouteFinder fFar = finder.session();
+                RouteFinder fFlow = finder.session();
+                sessions.addAll(Arrays.asList(fNear, fFar, fFlow));
+                fJoint.add(pool.submit(() -> build(model, fNear, recorder, near, true, quiet, STRATEGY_JOINT,
                         "Совместное подключение, ОКС присоединяются от ближних к сети", "joint-near")));
-                fJoint.add(pool.submit(() -> build(model, finder, recorder, far, true, quiet, STRATEGY_JOINT,
+                fJoint.add(pool.submit(() -> build(model, fFar, recorder, far, true, quiet, STRATEGY_JOINT,
                         "Совместное подключение, ОКС присоединяются от дальних от сети", "joint-far")));
-                fJoint.add(pool.submit(() -> build(model, finder, recorder, byFlow, true, quiet, STRATEGY_JOINT,
+                fJoint.add(pool.submit(() -> build(model, fFlow, recorder, byFlow, true, quiet, STRATEGY_JOINT,
                         "Совместное подключение, ОКС присоединяются по убыванию расхода", "joint-flow")));
             }
             sep = fSep.get();
@@ -180,16 +196,19 @@ public final class Planner {
                 joints.add(f.get());
             }
             // local search from every start: the result depends on the start more than on the start's own score
-            stage("перестройка совместного подключения", 3 * n * params.localSearchPasses);
+            stage("перестройка совместного подключения", 3 * (n * params.localSearchPasses
+                    + (params.groupRebuild ? Math.min(GROUP_CONNECTS, MAX_GROUPS * groupConnects(2) + n) : 0)));
             List<java.util.concurrent.Future<Candidate>> fImp = new ArrayList<>();
-            for (Candidate j : joints) {
-                fImp.add(pool.submit(() -> improve(model, finder, recorder, j, quiet)));
+            for (int i = 0; i < joints.size(); i++) {
+                Candidate j = joints.get(i);
+                RouteFinder f = sessions.get(i);
+                fImp.add(pool.submit(() -> improve(model, f, recorder, j, quiet)));
             }
             List<Candidate> improvedAll = new ArrayList<>();
             for (java.util.concurrent.Future<Candidate> f : fImp) {
                 improvedAll.add(f.get());
             }
-            improvedAll.sort(Comparator.comparingDouble(c -> c.score));
+            improvedAll.sort(Comparator.comparingDouble(c -> c.sel));
             improved = improvedAll.isEmpty() ? sep : improvedAll.get(0);
             cands.addAll(improvedAll);
         } catch (InterruptedException e) {
@@ -254,7 +273,10 @@ public final class Planner {
         return variants;
     }
 
-    /** Ranks variants by score (appendix 6): smaller score — higher rank. */
+    /**
+     * Ranks variants by score (appendix 6, 7.2): smaller score — higher rank. Which candidates become the variants is
+     * decided by the score of the choice of a scheme ({@link #select}); the rank in the result follows S.
+     */
     public static void rank(List<Variant> variants) {
         variants.sort(Comparator.comparingDouble(x -> x.summary.score));
         for (int i = 0; i < variants.size(); i++) {
@@ -266,7 +288,7 @@ public final class Planner {
         List<Candidate> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         List<Candidate> sorted = new ArrayList<>(cands);
-        sorted.sort(Comparator.comparingDouble(c -> c.score));
+        sorted.sort(Comparator.comparingDouble(c -> c.sel));
         for (Candidate c : sorted) {
             if (seen.add(signature(c))) {
                 out.add(c);
@@ -281,7 +303,10 @@ public final class Planner {
         return c.draft.signature() + "|" + String.join(",", un);
     }
 
-    /** The best distinct candidates, best first, at most {@link PlanParams#maxVariants}. */
+    /**
+     * The best distinct candidates by the score of the choice of a scheme (S with the shape), best first, at most
+     * {@link PlanParams#maxVariants}.
+     */
     private List<Candidate> select(List<Candidate> cands) {
         List<Candidate> d = distinct(cands);
         return new ArrayList<>(d.subList(0, Math.min(params.maxVariants, d.size())));
@@ -357,7 +382,44 @@ public final class Planner {
     /** Local search: take every OKS out and connect it again while the variant score decreases. */
     private Candidate improve(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
                               Diagnostics diag) {
-        Candidate cur = c;
+        Candidate cur = relocate(model, finder, recorder, c, c, diag);
+        // an OKS whose way out of its building a route of the variant runs through stays unconnected whatever order
+        // the single moves take: take that route out, connect the OKS, put the route back (bounded rounds)
+        for (int round = 0; round < MAX_UNBLOCK_ROUNDS; round++) {
+            Candidate next = unblock(model, finder, recorder, c, cur, diag);
+            if (next == cur) {
+                break;
+            }
+            cur = relocate(model, finder, recorder, c, next, diag);
+        }
+        // a branch of the network is taken out as a whole and connected again in several orders: the single moves keep
+        // the shared pieces where the first OKS of the build laid them
+        if (params.groupRebuild) {
+            Candidate next = regroup(model, finder, recorder, c, cur, diag);
+            if (next != cur) {
+                cur = relocate(model, finder, recorder, c, next, diag);
+            }
+        }
+        // pieces with turns (hooks left after an OKS was taken out, ways of an OKS that is no longer there) laid anew
+        if (params.straightenShared) {
+            cur = straighten(model, finder, recorder, c, cur);
+        }
+        if (cur != c) {
+            cur.explanation = c.explanation + "; схема улучшена перестройкой";
+            cur.announce();
+        }
+        return cur;
+    }
+
+    /** Rounds of {@link #unblock} (each followed by single moves) per local search. */
+    private static final int MAX_UNBLOCK_ROUNDS = 2;
+    /** Routes tried to be taken out for one OKS without a way out of its building: the nearest ones. */
+    private static final int MAX_BLOCKERS = 3;
+
+    /** Single moves: take every OKS out and connect it again while the variant score decreases. */
+    private Candidate relocate(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
+                               Candidate start, Diagnostics diag) {
+        Candidate cur = start;
         // the OKS after the last improvement of a pass were tried on the network the next pass starts from
         int lastChange = -1;
         for (int pass = 0; pass < params.localSearchPasses; pass++) {
@@ -387,14 +449,14 @@ public final class Planner {
                 } else {
                     un.remove(oks.id);
                 }
-                double score = assemble(model, next, un, TRIAL, new Diagnostics()).summary.score;
-                if (score < cur.score - 1e-9) {
+                Variant v = assemble(model, next, un, TRIAL, new Diagnostics());
+                if (v.metrics.selectionScore < cur.sel - 1e-9) {
                     JournalRecorder.Log log = null;
                     if (cur.log != null) {
                         log = cur.log.copy();
                         journalListener.event(c.build, recorder.connected(log, "rebuild", oks, used[0], next));
                     }
-                    cur = new Candidate(next, un, cur.strategy, cur.explanation, score, log, c.build);
+                    cur = new Candidate(next, un, cur.strategy, cur.explanation, v, log, c.build);
                     better = true;
                     changed = i;
                 }
@@ -404,17 +466,695 @@ public final class Planner {
             }
             lastChange = changed;
         }
-        if (cur != c) {
-            cur.explanation = c.explanation + "; схема улучшена перестройкой";
-            cur.announce();
+        return cur;
+    }
+
+    /**
+     * A move for an OKS left without a way out of its building ({@code ENTRY_BLOCKED}) by a route of this variant: the
+     * OKS that route leads to is taken out, the blocked OKS is connected, the taken one is connected again (now around
+     * it). The first such move that lowers the variant score is taken for each blocked OKS. Single moves cannot do it:
+     * taking one OKS out and connecting it again puts its route back where it blocks.
+     */
+    private Candidate unblock(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
+                              Candidate start, Diagnostics diag) {
+        Candidate cur = start;
+        Map<String, InputModel.Oks> byId = new HashMap<>();
+        for (InputModel.Oks o : model.getOks()) {
+            byId.put(o.id, o);
+        }
+        for (String id : new ArrayList<>(start.unconnected.keySet())) {
+            Unconnected u = cur.unconnected.get(id);
+            InputModel.Oks blocked = byId.get(id);
+            PipeSpec pipe = blocked == null ? null : ref.minPipeForFlow(blocked.flowTph);
+            if (u == null || u.reason != Unconnected.Reason.ENTRY_BLOCKED || pipe == null) {
+                continue;
+            }
+            // routes to a connection point (the part only that OKS uses) that run through the way out, nearest first
+            List<Draft.Node> owners = new ArrayList<>();
+            for (Draft.Node n : cur.draft.nodes.values()) {
+                if (n.kind == Draft.Kind.CP && finder.blocksEntry(blocked, pipe, n.up.coords, ref.pipe(n.up.dn))) {
+                    owners.add(n);
+                }
+            }
+            Coordinate at = blocked.routePoint.getCoordinate();
+            owners.sort(Comparator.comparingDouble((Draft.Node n) -> line(n.up.coords).distance(
+                    Crs.UTM_FACTORY.createPoint(at))).thenComparingInt(n -> n.id));
+            for (Draft.Node owner : owners.subList(0, Math.min(MAX_BLOCKERS, owners.size()))) {
+                InputModel.Oks taken = owner.oks;
+                Draft trial = cur.draft.copy();
+                trial.remove(taken);
+                if (!trial.recompute(ref) || !tieRuleHolds(model, trial) || !mergeHolds(finder, trial, taken)) {
+                    continue;
+                }
+                Route[] usedBlocked = new Route[1];
+                Draft withBlocked = connect(model, finder, trial, blocked, true, diag, new Unconnected.Failure(),
+                        usedBlocked);
+                tick();
+                if (withBlocked == null) {
+                    continue;
+                }
+                Map<String, Unconnected> un = new LinkedHashMap<>(cur.unconnected);
+                un.remove(blocked.id);
+                Route[] usedTaken = new Route[1];
+                Unconnected.Failure fail = new Unconnected.Failure();
+                Draft next = connect(model, finder, withBlocked, taken, true, diag, fail, usedTaken);
+                tick();
+                if (next == null) {
+                    next = withBlocked;
+                    un.put(taken.id, new Unconnected(taken.id, taken.flowTph, fail.reason, fail.detail));
+                }
+                Variant v = assemble(model, next, un, TRIAL, new Diagnostics());
+                if (v.metrics.selectionScore < cur.sel - 1e-9) {
+                    JournalRecorder.Log log = null;
+                    if (cur.log != null) {
+                        log = cur.log.copy();
+                        journalListener.event(c.build, recorder.connected(log, "rebuild", blocked, usedBlocked[0],
+                                withBlocked));
+                        if (usedTaken[0] != null) {
+                            journalListener.event(c.build, recorder.connected(log, "rebuild", taken, usedTaken[0],
+                                    next));
+                        } else {
+                            journalListener.event(c.build, recorder.unconnected(log, taken, un.get(taken.id)));
+                        }
+                    }
+                    cur = new Candidate(next, un, cur.strategy, cur.explanation, v, log, c.build);
+                    break;
+                }
+            }
         }
         return cur;
     }
+
+    // ------------------------------------------------------------------ group moves
+
+    /** Groups taken out and connected again per local search, at most. */
+    static final int MAX_GROUPS = 8;
+    /** Largest group (OKS below one branching chamber): more is a rebuild of a whole variant, not a local move. */
+    static final int MAX_GROUP_OKS = 6;
+    /** Groups up to this size are connected again in every order; larger ones — far first, by flow, near first. */
+    static final int PERMUTE_MAX_OKS = 4;
+    /** Connection attempts of the group moves per local search, at most (a group of 4 in every order takes 64). */
+    static final int GROUP_CONNECTS = 160;
+    /**
+     * Search work of the group moves per local search and per group, at most: legs evaluated by the searches
+     * ({@link RouteFinder#work} — the same for any threads, unlike a clock; on the city data of the case 1,2 million legs
+     * take 3–4 s). A group that runs over its share is dropped unfinished.
+     */
+    static final long GROUP_WORK = 1_200_000L;
+    static final long GROUP_WORK_ONE = 600_000L;
+
+    /** Connection attempts a group of {@code k} OKS takes: every order with shared beginnings, or three orders. */
+    static int groupConnects(int k) {
+        if (k > PERMUTE_MAX_OKS) {
+            return 3 * k;
+        }
+        int total = 0;
+        int level = 1;
+        for (int i = 0; i < k; i++) {
+            level *= k - i;
+            total += level;
+        }
+        return total;
+    }
+
+    /** A group: the OKS below a branching chamber (or of a whole tree) and where it hangs on the rest of the network. */
+    static final class Group {
+        final List<InputModel.Oks> oks;
+        final Coordinate anchor;
+        final double shape;
+        /** Turns per 100 m of the pipe the move lays anew: a dense web of turns first. */
+        final double density;
+        final int nodeId;
+
+        Group(List<InputModel.Oks> oks, Coordinate anchor, double shape, double length, int nodeId) {
+            this.oks = oks;
+            this.anchor = anchor;
+            this.shape = shape;
+            this.density = shape / Math.max(length / 100, 0.01);
+            this.nodeId = nodeId;
+        }
+
+        String key() {
+            List<String> ids = new ArrayList<>();
+            for (InputModel.Oks o : oks) {
+                ids.add(o.id);
+            }
+            Collections.sort(ids);
+            return String.join(",", ids);
+        }
+    }
+
+    /**
+     * Groups of a draft, the densest web of turns (turns per 100 m of the pipe the move lays anew) first: for every branching chamber and every tree, the OKS below it (2 to
+     * {@link #MAX_GROUP_OKS}); the shape is the turns and odd joints of the piece above the chamber and everything
+     * below it — the part the move lays anew. A group below one chamber of a larger group is a group of its own, so
+     * neighbouring branches that share a trunk are taken out together too.
+     */
+    List<Group> groups(Draft d) {
+        List<Group> out = new ArrayList<>();
+        double tol = ref.getStraightDeg();
+        for (Draft.Node n : d.nodes.values()) {
+            if (n.kind == Draft.Kind.CP) {
+                continue;
+            }
+            List<InputModel.Oks> oks = new ArrayList<>();
+            collectOksOf(n, oks);
+            if (oks.size() < 2 || oks.size() > MAX_GROUP_OKS) {
+                continue;
+            }
+            double shape = 0;
+            double length = 0;
+            List<Draft.Edge> stack = new ArrayList<>(n.down);
+            if (n.up != null) {
+                stack.add(n.up);
+            }
+            List<Draft.Node> joints = new ArrayList<>();
+            joints.add(n);
+            while (!stack.isEmpty()) {
+                Draft.Edge e = stack.remove(stack.size() - 1);
+                shape += edgeTurns(e, tol);
+                length += e.length();
+                if (e != n.up && e.down.kind == Draft.Kind.JUNCTION) {
+                    joints.add(e.down);
+                    stack.addAll(e.down.down);
+                }
+            }
+            for (Draft.Node j : joints) {
+                if (j.kind == Draft.Kind.JUNCTION) {
+                    int[] js = junctionShape(nodeDirections(j), tol, params.oddJointTurns);
+                    shape += js[0] + params.oddJointTurns * js[1];
+                }
+            }
+            Coordinate anchor = n.up != null ? n.up.up.c : n.c;
+            out.add(new Group(oks, anchor, shape, length, n.id));
+        }
+        out.sort(Comparator.comparingDouble((Group g) -> -g.density).thenComparingInt(g -> g.nodeId));
+        return out;
+    }
+
+    private static void collectOksOf(Draft.Node n, List<InputModel.Oks> out) {
+        if (n.kind == Draft.Kind.CP) {
+            out.add(n.oks);
+        }
+        for (Draft.Edge e : n.down) {
+            collectOksOf(e.down, out);
+        }
+    }
+
+    /**
+     * Group moves: a branch of the network (the OKS below a branching chamber, or a whole small tree) is taken out with
+     * its shared pieces and connected again in several orders; the best order is taken when it lowers the score of the
+     * choice of a scheme. Up to {@link #MAX_GROUPS} groups, the densest web of turns first, {@link #GROUP_CONNECTS}
+     * connection attempts and {@link #GROUP_WORK} of search work; after a taken move the groups of the new network are
+     * listed again (the tried ones skipped).
+     */
+    private Candidate regroup(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
+                              Candidate start, Diagnostics diag) {
+        Candidate cur = start;
+        Set<String> tried = new HashSet<>();
+        int budget = GROUP_CONNECTS;
+        long workLimit = finder.work() + GROUP_WORK;
+        int done = 0;
+        List<Group> list = groups(cur.draft);
+        int at = 0;
+        while (done < MAX_GROUPS && at < list.size() && finder.work() < workLimit) {
+            Group g = list.get(at++);
+            int need = groupConnects(g.oks.size());
+            if (!tried.add(g.key()) || need > budget) {
+                continue;
+            }
+            done++;
+            budget -= need;
+            Candidate next = reinsert(model, finder, recorder, c, cur, g,
+                    Math.min(workLimit, finder.work() + GROUP_WORK_ONE), diag);
+            if (next != null) {
+                cur = next;
+                list = groups(cur.draft);
+                at = 0;
+            }
+        }
+        return cur;
+    }
+
+    /** One step of a group move: the OKS, its route (null — left without one) and the draft after it. */
+    private static final class Move {
+        final InputModel.Oks oks;
+        final Route route;
+        final Draft draft;
+        final Unconnected failed;
+
+        Move(InputModel.Oks oks, Route route, Draft draft, Unconnected failed) {
+            this.oks = oks;
+            this.route = route;
+            this.draft = draft;
+            this.failed = failed;
+        }
+    }
+
+    /** Takes a group out and connects it again in every order (or three); returns a better candidate or null. */
+    private Candidate reinsert(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
+                               Candidate cur, Group g, long workLimit, Diagnostics diag) {
+        Draft base = cur.draft.copy();
+        Map<InputModel.Oks, Coordinate> exits = new LinkedHashMap<>();
+        for (InputModel.Oks o : g.oks) {
+            Draft.Node cp = base.cpOf(o);
+            if (cp == null) {
+                return null;
+            }
+            List<Coordinate> own = cp.up.coords;
+            exits.put(o, own.get(own.size() - (o.connectionInside() && own.size() > 2 ? 2 : 1)));
+        }
+        for (InputModel.Oks o : g.oks) {
+            base.remove(o);
+        }
+        if (!base.recompute(ref) || !tieRuleHolds(model, base)) {
+            return null;
+        }
+        // pieces merged where the group left must keep the clearances to the buildings of the group
+        for (Draft.Edge e : base.edges.values()) {
+            if (cur.draft.edges.containsKey(e.id)) {
+                continue;
+            }
+            for (Map.Entry<InputModel.Oks, Coordinate> x : exits.entrySet()) {
+                if (!mergeHolds(finder, base, e, x.getKey(), x.getValue())) {
+                    return null;
+                }
+            }
+        }
+        Map<String, Unconnected> un = new LinkedHashMap<>(cur.unconnected);
+        for (InputModel.Oks o : g.oks) {
+            un.remove(o.id);
+        }
+        Object[] best = new Object[2]; // moves, trial variant
+        if (g.oks.size() <= PERMUTE_MAX_OKS) {
+            permute(model, finder, base, un, new ArrayList<>(g.oks), new ArrayList<Move>(), best, workLimit, diag);
+        } else {
+            for (List<InputModel.Oks> order : groupOrders(model, g)) {
+                Draft d = base;
+                Map<String, Unconnected> u = new LinkedHashMap<>(un);
+                List<Move> moves = new ArrayList<>();
+                for (InputModel.Oks o : order) {
+                    if (finder.work() >= workLimit) {
+                        return null; // the work of the group moves ran out: the group is dropped unfinished
+                    }
+                    Move m = connectMove(model, finder, d, o, diag);
+                    moves.add(m);
+                    if (m.failed != null) {
+                        u.put(o.id, m.failed);
+                    } else {
+                        d = m.draft;
+                    }
+                }
+                offer(model, d, u, moves, best);
+            }
+        }
+        if (best[0] == null || finder.work() > workLimit) {
+            return null;
+        }
+        Variant v = (Variant) best[1];
+        if (!(v.metrics.selectionScore < cur.sel - 1e-9)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        List<Move> moves = (List<Move>) best[0];
+        Draft last = base;
+        Map<String, Unconnected> u = new LinkedHashMap<>(un);
+        JournalRecorder.Log log = cur.log == null ? null : cur.log.copy();
+        for (Move m : moves) {
+            if (m.failed != null) {
+                u.put(m.oks.id, m.failed);
+                if (log != null) {
+                    journalListener.event(c.build, recorder.unconnected(log, m.oks, m.failed));
+                }
+            } else {
+                last = m.draft;
+                if (log != null) {
+                    journalListener.event(c.build, recorder.connected(log, "rebuild", m.oks, m.route, m.draft));
+                }
+            }
+        }
+        return new Candidate(last, u, cur.strategy, cur.explanation, v, log, c.build);
+    }
+
+    /** Every order of the remaining OKS; drafts of a shared beginning are made once. */
+    private void permute(InputModel model, RouteFinder finder, Draft d, Map<String, Unconnected> un,
+                         List<InputModel.Oks> rest, List<Move> moves, Object[] best, long workLimit,
+                         Diagnostics diag) {
+        if (rest.isEmpty()) {
+            offer(model, d, un, moves, best);
+            return;
+        }
+        for (int i = 0; i < rest.size() && finder.work() <= workLimit; i++) {
+            InputModel.Oks o = rest.get(i);
+            Move m = connectMove(model, finder, d, o, diag);
+            List<InputModel.Oks> r = new ArrayList<>(rest);
+            r.remove(i);
+            List<Move> mv = new ArrayList<>(moves);
+            mv.add(m);
+            if (m.failed != null) {
+                Map<String, Unconnected> u = new LinkedHashMap<>(un);
+                u.put(o.id, m.failed);
+                permute(model, finder, d, u, r, mv, best, workLimit, diag);
+            } else {
+                permute(model, finder, m.draft, un, r, mv, best, workLimit, diag);
+            }
+        }
+    }
+
+    private Move connectMove(InputModel model, RouteFinder finder, Draft d, InputModel.Oks o, Diagnostics diag) {
+        Route[] used = new Route[1];
+        Unconnected.Failure fail = new Unconnected.Failure();
+        Draft next = connect(model, finder, d, o, true, diag, fail, used);
+        tick();
+        return next == null ? new Move(o, null, null, new Unconnected(o.id, o.flowTph, fail.reason, fail.detail))
+                : new Move(o, used[0], next, null);
+    }
+
+    /** Keeps the order whose result has the smallest score of the choice (the first of equal ones). */
+    private void offer(InputModel model, Draft d, Map<String, Unconnected> un, List<Move> moves, Object[] best) {
+        Variant v = assemble(model, d, un, TRIAL, new Diagnostics());
+        if (best[0] == null || v.metrics.selectionScore < ((Variant) best[1]).metrics.selectionScore - 1e-9) {
+            best[0] = new ArrayList<>(moves);
+            best[1] = v;
+        }
+    }
+
+    /**
+     * Orders of a large group: from the farthest from where the group hangs, by decreasing flow, from the nearest (the
+     * same orders as the joint builds, relative to the branch); repeated orders are left out.
+     */
+    private static List<List<InputModel.Oks>> groupOrders(InputModel model, Group g) {
+        Comparator<InputModel.Oks> near = Comparator.comparingDouble(
+                (InputModel.Oks o) -> o.connectionPoint.getCoordinate().distance(g.anchor)).thenComparing(o -> o.id);
+        List<InputModel.Oks> byNear = new ArrayList<>(g.oks);
+        byNear.sort(near);
+        List<InputModel.Oks> byFar = new ArrayList<>(byNear);
+        Collections.reverse(byFar);
+        List<InputModel.Oks> byFlow = new ArrayList<>(byNear);
+        byFlow.sort(Comparator.comparingDouble((InputModel.Oks o) -> -o.flowTph));
+        List<List<InputModel.Oks>> out = new ArrayList<>();
+        for (List<InputModel.Oks> o : Arrays.asList(byFar, byFlow, byNear)) {
+            if (!out.contains(o)) {
+                out.add(o);
+            }
+        }
+        return out;
+    }
+
+    // ------------------------------------------------------------------ straightening
+
+    /** Pieces laid anew per local search, at most (those with the most turns first). */
+    static final int MAX_STRAIGHTEN = 24;
+
+    /**
+     * Lays pieces with turns anew between their nodes ({@link RouteFinder#relay}: the same graph, rules and turn
+     * penalty as the search of a route); a piece to a connection point keeps its last straight piece (the entry into
+     * the building). Chambers stay where they are. A new way is taken when the whole draft holds and the score of the
+     * choice of a scheme is lower, or the same with less turns.
+     */
+    private Candidate straighten(InputModel model, RouteFinder finder, JournalRecorder recorder, Candidate c,
+                                 Candidate start) {
+        Candidate cur = start;
+        double tol = ref.getStraightDeg();
+        List<Draft.Edge> list = new ArrayList<>();
+        for (Draft.Edge e : cur.draft.edges.values()) {
+            if (headTurns(e, tol) > 0) {
+                list.add(e);
+            }
+        }
+        list.sort(Comparator.comparingInt((Draft.Edge e) -> -headTurns(e, tol)).thenComparingInt(e -> e.id));
+        for (Draft.Edge e0 : list.subList(0, Math.min(MAX_STRAIGHTEN, list.size()))) {
+            Draft t = cur.draft.copy();
+            Draft.Edge e = t.edges.get(e0.id);
+            if (e == null || !relayHead(model, finder, t, e)) {
+                continue;
+            }
+            Variant v = assemble(model, t, cur.unconnected, TRIAL, new Diagnostics());
+            double shape = v.metrics.shapeTurns + params.oddJointTurns * v.metrics.oddJoints;
+            if (v.metrics.selectionScore < cur.sel - 1e-9
+                    || v.metrics.selectionScore <= cur.sel + 1e-9 && shape < cur.shape) {
+                JournalRecorder.Log log = null;
+                if (cur.log != null) {
+                    log = cur.log.copy();
+                    List<InputModel.Oks> fed = new ArrayList<>();
+                    collectOksOf(e0.down, fed);
+                    journalListener.event(c.build, recorder.straightened(log, fed.get(0).id, t));
+                }
+                cur = new Candidate(t, cur.unconnected, cur.strategy, cur.explanation, v, log, c.build);
+            }
+        }
+        return cur;
+    }
+
+    /** Pieces at the end of an edge that stay when it is laid anew: the entry into the building (and the inlet). */
+    private static int keptPieces(Draft.Edge e) {
+        return e.down.kind == Draft.Kind.CP ? 1 + (e.down.oks.connectionInside() ? 1 : 0) : 0;
+    }
+
+    /** Turns of the part of an edge that may be laid anew. */
+    static int headTurns(Draft.Edge e, double tol) {
+        int end = e.coords.size() - 1 - keptPieces(e);
+        int n = 0;
+        for (int k = 1; k < end; k++) {
+            if (deflectionDeg(e.coords.get(k - 1), e.coords.get(k), e.coords.get(k + 1)) > tol) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Lays the head of an edge anew in the draft; false (the draft is then spoilt) when there is no valid way. */
+    boolean relayHead(InputModel model, RouteFinder finder, Draft t, Draft.Edge e) {
+        int end = e.coords.size() - 1 - keptPieces(e);
+        if (end < 2) {
+            return false;
+        }
+        List<Coordinate> head = new ArrayList<>(e.coords.subList(0, end + 1));
+        List<RouteFinder.Built> others = new ArrayList<>();
+        for (Draft.Edge o : t.edges.values()) {
+            if (o != e && o.up != e.up && o.up != e.down && o.down != e.up) {
+                others.add(new RouteFinder.Built(line(o.coords), ref.pipe(o.dn), "e" + o.id));
+            }
+        }
+        PipeSpec pipe = ref.pipe(e.dn);
+        boolean atTie = e.up.kind == Draft.Kind.TIE;
+        List<Coordinate> way = finder.relay(head, pipe, atTie, others);
+        if (way == null || sameWay(way, head)) {
+            return false;
+        }
+        if (e.down.kind == Draft.Kind.CP && e.down.oks.polygon != null) {
+            // a footprint of an earlier input format is no obstacle of the search, but the route keeps out of its own
+            InputModel.Oks own = e.down.oks;
+            org.locationtech.jts.geom.Geometry b = params.rules.throughOwnParts ? own.mainPart() : own.polygon;
+            if (line(way).intersects(b.buffer(-0.05))) {
+                return false;
+            }
+        }
+        List<RoutingContext.EdgeEval> evals = finder.evaluatePolyline(way, pipe, null, atTie);
+        if (evals == null) {
+            return false;
+        }
+        t.relayHead(e, end, way, evals);
+        return apartFromNeighbours(e) && t.recompute(ref) && recheck(finder, t) == null && !t.hasCrossings()
+                && !t.hasSharpTurns(ref) && tieRuleHolds(model, t);
+    }
+
+    /**
+     * A piece laid anew is searched without the pieces that share its nodes (they meet it there): beyond a short
+     * stretch at the shared node it must keep apart from them as from any other new route — the pipes plus the
+     * clearance between new routes. Without this the new way could run along a branch of the same chamber.
+     */
+    private boolean apartFromNeighbours(Draft.Edge e) {
+        LineString l = line(e.coords);
+        double hw = ref.pipe(e.dn).getHalfWidthM();
+        for (Draft.Node n : Arrays.asList(e.up, e.down)) {
+            List<Draft.Edge> near = new ArrayList<>(n.down);
+            if (n.up != null) {
+                near.add(n.up);
+            }
+            for (Draft.Edge o : near) {
+                if (o == e) {
+                    continue;
+                }
+                double gap = hw + ref.pipe(o.dn).getHalfWidthM() + params.newRouteClearanceM;
+                org.locationtech.jts.geom.Geometry disk = Crs.UTM_FACTORY.createPoint(n.c).buffer(2 * gap, 8);
+                org.locationtech.jts.geom.Geometry a = l.difference(disk);
+                org.locationtech.jts.geom.Geometry b = line(o.coords).difference(disk);
+                if (!a.isEmpty() && !b.isEmpty() && a.distance(b) < gap - 1e-6) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean sameWay(List<Coordinate> a, List<Coordinate> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (a.get(i).distance(b.get(i)) > 1e-6) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ shape of a scheme
+
+    /** Turns inside an edge (the vertex at the wall before an inlet piece is not a turn of the route). */
+    static int edgeTurns(Draft.Edge e, double tol) {
+        int last = e.coords.size() - 1
+                - (e.down.kind == Draft.Kind.CP && e.down.oks.connectionInside() ? 1 : 0);
+        int n = 0;
+        for (int k = 1; k < last; k++) {
+            if (deflectionDeg(e.coords.get(k - 1), e.coords.get(k), e.coords.get(k + 1)) > tol) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Shape of a draft as the search prices it: {turns, joints that are not a T}. Turns — inside the edges and where the
+     * pipe bends in a branching chamber; joints — branches at an odd angle to the pipe in a branching chamber and new
+     * pipes at an odd angle to an existing segment at a tie-in (an existing chamber has no angle).
+     */
+    static int[] shape(Draft d, ReferenceData ref, double oddJointTurns) {
+        double tol = ref.getStraightDeg();
+        int turns = 0;
+        int odd = 0;
+        for (Draft.Edge e : d.edges.values()) {
+            turns += edgeTurns(e, tol);
+        }
+        for (Draft.Node n : d.nodes.values()) {
+            if (n.kind == Draft.Kind.JUNCTION) {
+                int[] j = junctionShape(nodeDirections(n), tol, oddJointTurns);
+                turns += j[0];
+                odd += j[1];
+            } else if (n.kind == Draft.Kind.TIE && n.tie.pipeDirs != null) {
+                for (Draft.Edge e : n.down) {
+                    Coordinate q = e.coords.get(1);
+                    int[] j = jointShape(n.tie.pipeDirs, new double[]{q.x - n.c.x, q.y - n.c.y}, tol);
+                    turns += j[0];
+                    odd += j[1];
+                }
+            }
+        }
+        return new int[]{turns, odd};
+    }
+
+    /** Directions of the edges at a node, away from it (the edge above first). */
+    static double[][] nodeDirections(Draft.Node n) {
+        List<double[]> out = new ArrayList<>();
+        if (n.up != null) {
+            List<Coordinate> c = n.up.coords;
+            Coordinate p = c.get(c.size() - 2);
+            out.add(new double[]{p.x - n.c.x, p.y - n.c.y});
+        }
+        for (Draft.Edge e : n.down) {
+            Coordinate q = e.coords.get(1);
+            out.add(new double[]{q.x - n.c.x, q.y - n.c.y});
+        }
+        return out.toArray(new double[0][]);
+    }
+
+    /**
+     * A branching chamber: the pipe through it is the pair of directions that gives the simplest shape; it bends
+     * (a turn) unless the two are opposite; every other direction is a branch, a T when it is at 90° or opposite to
+     * both directions of the pipe, otherwise an odd joint. Returns {turns, odd joints}.
+     */
+    static int[] junctionShape(double[][] dirs, double tol, double oddJointTurns) {
+        int m = dirs.length;
+        if (m < 2) {
+            return new int[]{0, 0};
+        }
+        int[] best = null;
+        double bestCost = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < m; i++) {
+            for (int j = i + 1; j < m; j++) {
+                int turn = 180 - angleDeg(dirs[i], dirs[j]) > tol ? 1 : 0;
+                int odd = 0;
+                for (int k = 0; k < m; k++) {
+                    if (k != i && k != j && !isT(dirs[k], new double[][]{dirs[i], dirs[j]}, tol)) {
+                        odd++;
+                    }
+                }
+                double cost = turn + oddJointTurns * odd;
+                if (cost < bestCost - 1e-9 || Math.abs(cost - bestCost) <= 1e-9 && odd < best[1]) {
+                    bestCost = cost;
+                    best = new int[]{turn, odd};
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * A new pipe joining an existing one (the rule of {@link RouteFinder#junctionScore}): at the end of the pipe a bend
+     * like any other — nothing straight on, a turn up to 90°, an odd joint sharper; inside it or at its bend nothing for
+     * a T, an odd joint otherwise. Returns {turns, odd joints}.
+     */
+    static int[] jointShape(double[][] pipeDirs, double[] branch, double tol) {
+        if (Math.hypot(branch[0], branch[1]) < 1e-9) {
+            return new int[]{0, 0};
+        }
+        if (pipeDirs.length == 1) {
+            double bend = 180 - angleDeg(branch, pipeDirs[0]);
+            return bend <= tol ? new int[]{0, 0} : bend <= 90 + tol ? new int[]{1, 0} : new int[]{0, 1};
+        }
+        return isT(branch, pipeDirs, tol) ? new int[]{0, 0} : new int[]{0, 1};
+    }
+
+    private static boolean isT(double[] b, double[][] pipe, double tol) {
+        for (double[] d : pipe) {
+            if (Math.hypot(d[0], d[1]) < 1e-9) {
+                continue;
+            }
+            double a = angleDeg(b, d);
+            if (!(Math.abs(a - 90) <= tol || a >= 180 - tol)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static double angleDeg(double[] u, double[] v) {
+        double lu = Math.hypot(u[0], u[1]);
+        double lv = Math.hypot(v[0], v[1]);
+        if (lu < 1e-9 || lv < 1e-9) {
+            return 180;
+        }
+        double cos = (u[0] * v[0] + u[1] * v[1]) / (lu * lv);
+        return Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, cos))));
+    }
+
+    /**
+     * Joins of the new network excluded after one failed are searched for again at most this many times per OKS
+     * (every exclusion takes away at least the part of the network the failed join led through, so the number of
+     * searches is bounded by the size of the network anyway; this keeps the time of one connection bounded).
+     */
+    static final int MAX_JOIN_EXCLUSIONS = 6;
+    /** Searches for the DN of the route itself (the route was checked for a smaller DN than the tree needs). */
+    private static final int MAX_DN_RETRIES = 6;
+    /** Shared pieces laid anew for one join (each grew to a larger DN and no longer keeps the clearances). */
+    static final int MAX_RELAYS = 3;
 
     /**
      * Connects one OKS to a copy of the draft; returns the new draft or null. The route is searched with the
      * minimal DN for the OKS flow; if flows, DN and the length limit of the whole tree cannot be satisfied with
      * that geometry, the route is searched again for the larger DN.
+     * <p>
+     * A join of the new network can fail after the route is found: the shared pieces up to the tie-in carry more and
+     * grow to a larger DN that no longer keeps the clearances, or a path gets longer than the limit of its DN. Then
+     * <ol>
+     *   <li>such a grown shared piece is laid anew for its new DN between the same chambers ({@link #relayShared});
+     *   if the whole draft then holds, it is a candidate;</li>
+     *   <li>the joins below the failed piece are excluded (only they lead through it) and the search runs again —
+     *   other joins and tie-ins into the existing network stay; only when nothing is found, tie-ins alone.</li>
+     * </ol>
+     * The cheapest (by the variant score) of the draft found that way, the re-laid candidates and the connection by a
+     * tie-in into the existing network alone is taken.
      */
     private Draft connect(InputModel model, RouteFinder finder, Draft d, InputModel.Oks oks, boolean joint,
                           Diagnostics diag, Unconnected.Failure fail, Route[] used) {
@@ -426,16 +1166,33 @@ public final class Planner {
         }
         d.recompute(ref);
         boolean useAttach = joint && !d.edges.isEmpty();
-        for (int attempt = 0; attempt < 6; attempt++) {
+        // pieces of the draft a failed join led through: joins below them are not searched for again
+        Set<Integer> excluded = new HashSet<>();
+        int exclusions = 0;
+        int dnRetries = 0;
+        // other ways to connect (a grown shared piece laid anew, tie-ins alone) with their routes, compared at the end
+        List<Draft> others = new ArrayList<>();
+        List<Route> otherRoutes = new ArrayList<>();
+        Draft found = null;
+        Route foundRoute = null;
+        int maxAttempts = MAX_DN_RETRIES + MAX_JOIN_EXCLUSIONS + 1;
+        // the search ended with a reason of its own (otherwise the attempts ran out)
+        boolean stopped = false;
+        for (int attempt = 0; attempt < maxAttempts && found == null && !stopped; attempt++) {
             NetworkState state = NetworkState.fromDraft(model, ref, d);
             List<RouteFinder.Built> built = new ArrayList<>();
             for (Draft.Edge e : d.edges.values()) {
                 built.add(new RouteFinder.Built(line(e.coords), ref.pipe(e.dn), "e" + e.id));
             }
-            DraftAttach attach = useAttach ? new DraftAttach(d, state, model) : null;
+            DraftAttach attach = useAttach ? new DraftAttach(d, state, model, excluded) : null;
             Route r = finder.find(oks, pipe, built, state, attach, diag, fail);
             if (r == null) {
-                return null;
+                if (attach != null && !excluded.isEmpty()) {
+                    useAttach = false; // nothing without the excluded joins: tie-ins into the existing network only
+                    continue;
+                }
+                stopped = true;
+                continue;
             }
             if (oks.connectionInside()) {
                 r = r.withEnd(oks.connectionPoint.getCoordinate());
@@ -444,51 +1201,192 @@ public final class Planner {
             Draft.Node cp = trial.insert(r);
             if (!trial.recompute(ref)) {
                 if (r.tie.isAttach()) {
-                    useAttach = false;
+                    useAttach = exclude(d, r.tie, -1, excluded) && ++exclusions < MAX_JOIN_EXCLUSIONS;
                     continue;
                 }
                 fail.set(Unconnected.Reason.LENGTH_LIMIT, String.format("трасса %.0f м, ДУ %d, предел %.0f м",
                         r.length(), pipe.getDn(), pipe.getMaxLengthM()));
-                return null;
+                stopped = true;
+                continue;
             }
             Draft.Edge bad = recheck(finder, trial);
             if (bad == null && trial.hasCrossings()) {
                 // the new route crosses one that is already there (possible after a re-check for a larger DN)
                 fail.set(Unconnected.Reason.NO_ROUTE, "трасса пересекает уже построенную");
-                return null;
+                stopped = true;
+                continue;
             }
             if (bad == null && trial.hasSharpTurns(ref)) {
                 fail.set(Unconnected.Reason.NO_ROUTE, "поворот трассы острее 90°");
-                return null;
+                stopped = true;
+                continue;
             }
             if (bad == null && !tieRuleHolds(model, trial)) {
                 // the tie-in of this draft would have to be made in a chamber that has a free branch
                 fail.set(Unconnected.Reason.NO_ROUTE, "врезка ближе 10 м к камере со свободным местом");
-                return null;
+                stopped = true;
+                continue;
             }
             if (bad == null) {
-                used[0] = r;
+                found = trial;
+                foundRoute = r;
                 if (cp.up.dn > pipe.getDn() && !r.tie.isAttach()) {
                     diag.warning("route.dn_increased_for_length", oks.id, String.format(
                             "Route %.1f m > limit %.0f m of DN %d, DN increased to %d", r.length(),
                             pipe.getMaxLengthM(), pipe.getDn(), cp.up.dn));
                 }
-                return trial;
+                break;
             }
             // the tree needs a larger DN than the route was checked for: search again with that DN,
-            // or without joining the new network if the shared part is the problem
+            // or, if a shared piece is the problem, lay it anew and look for other joins
             int newDn = cp.up.dn;
             if (bad == cp.up && newDn > pipe.getDn()) {
                 pipe = ref.pipe(newDn);
+                if (++dnRetries >= MAX_DN_RETRIES) {
+                    break; // the attempts ran out
+                }
             } else if (r.tie.isAttach()) {
-                useAttach = false;
+                Draft again = relayShared(model, finder, trial, bad, cp);
+                if (again != null) {
+                    others.add(again);
+                    otherRoutes.add(r);
+                }
+                int failedId = d.edges.containsKey(bad.id) ? bad.id : -1;
+                useAttach = exclude(d, r.tie, failedId, excluded) && ++exclusions < MAX_JOIN_EXCLUSIONS;
             } else {
                 fail.set(Unconnected.Reason.NO_ROUTE, "трасса не проходит по отступам с увеличенным ДУ " + newDn);
-                return null;
+                stopped = true;
+                continue;
             }
         }
-        fail.set(Unconnected.Reason.NO_ROUTE, "не удалось согласовать ДУ и отступы за 6 попыток");
-        return null;
+        // after a failed join the tie-ins into the existing network alone are a candidate too (as before, when a failed
+        // join ended the search of joins): the estimate of a join does not see every growth of the tree
+        if (exclusions > 0 && (found == null ? useAttach : foundRoute.tie.isAttach())) {
+            Route[] alone = new Route[1];
+            Draft tieOnly = connect(model, finder, d, oks, false, new Diagnostics(), new Unconnected.Failure(), alone);
+            if (tieOnly != null) {
+                others.add(tieOnly);
+                otherRoutes.add(alone[0]);
+            }
+        }
+        // the cheapest of the draft found, the drafts with a shared piece laid anew and the tie-in alone
+        Draft best = found;
+        Route bestRoute = foundRoute;
+        double bestScore = found == null || others.isEmpty() ? Double.POSITIVE_INFINITY : trialScore(model, found);
+        for (int i = 0; i < others.size(); i++) {
+            double s = trialScore(model, others.get(i));
+            if (best == null || s < bestScore - 1e-9) {
+                bestScore = s;
+                best = others.get(i);
+                bestRoute = otherRoutes.get(i);
+            }
+        }
+        if (best == null) {
+            if (!stopped) {
+                fail.set(Unconnected.Reason.NO_ROUTE, "не удалось согласовать ДУ и отступы за " + maxAttempts
+                        + " попыток");
+            }
+            return null;
+        }
+        used[0] = bestRoute;
+        return best;
+    }
+
+    /**
+     * Score of a draft for comparing ways of connecting the same OKS (the unconnected ones are the same): the score of
+     * the choice of a scheme (S with the shape).
+     */
+    private double trialScore(InputModel model, Draft d) {
+        return assemble(model, d, Collections.<String, Unconnected>emptyMap(), TRIAL, new Diagnostics())
+                .metrics.selectionScore;
+    }
+
+    /**
+     * Excludes the joins that lead through a failed piece of the draft (its id, or -1 when the failed piece is the
+     * part of the joined edge above the new junction): joins on that piece and everything below it. The join that
+     * failed is always excluded, so every call takes something away. Returns whether joins remain worth searching.
+     */
+    private static boolean exclude(Draft d, TieOption tie, int failedEdgeId, Set<Integer> excluded) {
+        if (failedEdgeId > 0) {
+            excluded.add(failedEdgeId);
+        }
+        if (!leadsThrough(d, tie, excluded)) {
+            // the failed piece is not on the way of this join (a run of one DN grew as a whole): leave out the join
+            excluded.add(tie.attachEdgeId > 0 ? tie.attachEdgeId : d.nodes.get(tie.attachNodeId).up.id);
+        }
+        return true;
+    }
+
+    /** The edges with ids in {@code excluded} and all edges below them. */
+    static Set<Integer> below(Draft d, Set<Integer> excluded) {
+        if (excluded.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Integer> out = new HashSet<>();
+        List<Draft.Edge> stack = new ArrayList<>();
+        for (int id : excluded) {
+            Draft.Edge e = d.edges.get(id);
+            if (e != null) {
+                stack.add(e);
+            }
+        }
+        while (!stack.isEmpty()) {
+            Draft.Edge e = stack.remove(stack.size() - 1);
+            if (out.add(e.id)) {
+                stack.addAll(e.down.down);
+            }
+        }
+        return out;
+    }
+
+    /** Whether a join leads through one of the {@code excluded} edges (lies on it or below it). */
+    static boolean leadsThrough(Draft d, TieOption tie, Set<Integer> excluded) {
+        Draft.Edge e = tie.attachEdgeId > 0 ? d.edges.get(tie.attachEdgeId) : d.nodes.get(tie.attachNodeId).up;
+        while (e != null) {
+            if (excluded.contains(e.id)) {
+                return true;
+            }
+            e = e.up.up;
+        }
+        return false;
+    }
+
+    /**
+     * Lays the grown shared pieces of a trial anew for their DN (between the same chambers, entry legs and tie-ins
+     * untouched) until the whole draft holds: flows, DN, the length limit, clearances, crossings, turns, the tie-in
+     * rule. Returns the draft or null. Only pieces between chambers are laid anew: a piece ending at a connection
+     * point holds the straight entry into the building.
+     */
+    private Draft relayShared(InputModel model, RouteFinder finder, Draft trial, Draft.Edge bad, Draft.Node cp) {
+        Draft t = trial.copy();
+        Draft.Edge e = t.edges.get(bad.id);
+        for (int i = 0; i < MAX_RELAYS && e != null; i++) {
+            if (e.down.kind != Draft.Kind.JUNCTION || e.id == cp.up.id) {
+                return null;
+            }
+            List<RouteFinder.Built> others = new ArrayList<>();
+            for (Draft.Edge o : t.edges.values()) {
+                if (o != e && o.up != e.up && o.up != e.down && o.down != e.up) {
+                    others.add(new RouteFinder.Built(line(o.coords), ref.pipe(o.dn), "e" + o.id));
+                }
+            }
+            PipeSpec pipe = ref.pipe(e.dn);
+            boolean atTie = e.up.kind == Draft.Kind.TIE;
+            List<Coordinate> way = finder.relay(e.coords, pipe, atTie, others);
+            List<RoutingContext.EdgeEval> evals = way == null ? null : finder.evaluatePolyline(way, pipe, null, atTie);
+            if (evals == null) {
+                return null;
+            }
+            t.relay(e, way, evals);
+            if (!t.recompute(ref)) {
+                return null;
+            }
+            e = recheck(finder, t);
+        }
+        if (e != null || t.hasCrossings() || t.hasSharpTurns(ref) || !tieRuleHolds(model, t)) {
+            return null;
+        }
+        return t;
     }
 
     /**
@@ -522,14 +1420,15 @@ public final class Planner {
      * must keep the clearance to that building, now a foreign one, and is checked again near that end.
      */
     private boolean mergeHolds(RouteFinder finder, Draft d, InputModel.Oks removed) {
-        Draft.Edge e = d.merged;
-        if (e == null) {
-            return true;
-        }
+        return d.merged == null || mergeHolds(finder, d, d.merged, removed, d.removedExit);
+    }
+
+    /** {@link #mergeHolds(RouteFinder, Draft, InputModel.Oks)} for an edge and the outdoor end of the removed route. */
+    private boolean mergeHolds(RouteFinder finder, Draft d, Draft.Edge e, InputModel.Oks removed, Coordinate exit) {
         LineString l = line(e.coords);
         PipeSpec pipe = ref.pipe(e.dn);
         double clearance = ref.buildingDistance(e.dn) + pipe.getHalfWidthM() + params.extraClearanceM;
-        if (d.removedExit != null && l.isWithinDistance(Crs.UTM_FACTORY.createPoint(d.removedExit),
+        if (exit != null && l.isWithinDistance(Crs.UTM_FACTORY.createPoint(exit),
                 RoutingContext.escapeRadius(clearance))) {
             return finder.checkPolyline(e.coords, pipe, e.down.kind == Draft.Kind.CP ? e.down.oks : null,
                     e.up.kind == Draft.Kind.TIE);
@@ -601,11 +1500,21 @@ public final class Planner {
         private final Map<String, Double> chainMemo = new HashMap<>();
         private final Map<Integer, Double> upMemo = new HashMap<>();
 
+        /** Edges whose joins are left out: the excluded ones and everything below them. */
+        private final Set<Integer> blocked;
+
         DraftAttach(Draft d, NetworkState state, InputModel model) {
+            this(d, state, model, Collections.<Integer>emptySet());
+        }
+
+        /** Without the joins on the {@code excluded} edges and below them (they are neither goals nor distances). */
+        DraftAttach(Draft d, NetworkState state, InputModel model, Set<Integer> excluded) {
             this.d = d;
             this.state = state;
             this.model = model;
+            this.blocked = below(d, excluded);
         }
+
 
         /** Distances by point: the draft does not change while this OKS is searched for, the corners repeat. */
         private final Map<RoutingContext.EdgeKey, Double> distances = new HashMap<>();
@@ -620,6 +1529,9 @@ public final class Planner {
             if (segments == null) {
                 segments = new ArrayList<>();
                 for (Draft.Edge e : d.edges.values()) {
+                    if (blocked.contains(e.id)) {
+                        continue;
+                    }
                     for (int i = 0; i + 1 < e.coords.size(); i++) {
                         segments.add(new Coordinate[]{e.coords.get(i), e.coords.get(i + 1)});
                     }
@@ -645,9 +1557,33 @@ public final class Planner {
         private List<Coordinate[]> segments;
 
         @Override
+        public List<Coordinate[]> pieces() {
+            distance(new Coordinate(0, 0)); // lays out the segments
+            return segments;
+        }
+
+        @Override
+        public double[] nearestPiece(Coordinate v) {
+            distance(v); // lays out the segments
+            double best = Double.POSITIVE_INFINITY;
+            double[] out = null;
+            for (Coordinate[] sg : segments) {
+                double d = Distance.pointToSegment(v, sg[0], sg[1]);
+                if (d < best && sg[0].distance(sg[1]) >= 1.0) {
+                    best = d;
+                    out = new double[]{sg[1].x - sg[0].x, sg[1].y - sg[0].y, d};
+                }
+            }
+            return out;
+        }
+
+        @Override
         public List<TieOption> attachOptions(Coordinate v, PipeSpec pipe, double flow) {
             List<TieOption> out = new ArrayList<>();
             for (Draft.Edge e : d.edges.values()) {
+                if (blocked.contains(e.id)) {
+                    continue;
+                }
                 double len = e.length();
                 double bestD = Double.POSITIVE_INFINITY;
                 double bestPos = -1;
@@ -687,10 +1623,11 @@ public final class Planner {
                 }
                 TieOption o = new TieOption(bestQ, e.id, bestPos, 0, edgeScore(e, bestPos, flow, pipe));
                 o.attachDn = Math.max(grown(e, flow), pipe.getDn());
+                o.pipeDirs = TieOption.dirsAt(e.coords, bestPos);
                 out.add(o);
             }
             for (Draft.Node n : d.nodes.values()) {
-                if (n.kind == Draft.Kind.JUNCTION && n.degree() < ref.getMaxChamberDegree()
+                if (n.kind == Draft.Kind.JUNCTION && !blocked.contains(n.up.id) && n.degree() < ref.getMaxChamberDegree()
                         && n.c.distance(v) <= params.attachSearchM) {
                     TieOption o = new TieOption(n.c, 0, 0, n.id, junctionScore(n, flow, pipe));
                     int dn = Math.max(grown(n.up, flow), pipe.getDn());
@@ -698,10 +1635,26 @@ public final class Planner {
                         dn = Math.max(dn, e.dn);
                     }
                     o.attachDn = dn;
+                    o.pipeDirs = nodeDirs(n);
                     out.add(o);
                 }
             }
             return out;
+        }
+
+        /** Directions of the edges at a junction, away from it. */
+        private double[][] nodeDirs(Draft.Node n) {
+            List<double[]> out = new ArrayList<>();
+            if (n.up != null) {
+                List<Coordinate> c = n.up.coords;
+                Coordinate p = c.get(c.size() - 2);
+                out.add(new double[]{p.x - n.c.x, p.y - n.c.y});
+            }
+            for (Draft.Edge e : n.down) {
+                Coordinate q = e.coords.get(1);
+                out.add(new double[]{q.x - n.c.x, q.y - n.c.y});
+            }
+            return out.toArray(new double[0][]);
         }
 
         private boolean insideSpecial(Draft.Edge e, double pos) {
@@ -1026,6 +1979,11 @@ public final class Planner {
         LengthRuns.compute(v, ref, params.rules);
         v.metrics.trees = d.roots.size();
         v.metrics.junctions = junctionChambers.size();
+        int[] shape = shape(d, ref, params.oddJointTurns);
+        v.metrics.shapeTurns = shape[0];
+        v.metrics.oddJoints = shape[1];
+        v.metrics.selectionScore = sm.score
+                + params.shapeWeight * params.turnPenaltyScore * (shape[0] + params.oddJointTurns * shape[1]);
         return v;
     }
 

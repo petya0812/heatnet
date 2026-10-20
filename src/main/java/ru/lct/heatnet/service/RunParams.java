@@ -30,6 +30,20 @@ public class RunParams {
     @JsonProperty("turn_penalty")
     public Double turnPenalty;
 
+    @Schema(description = "Цена стыка с сетью не буквой «Т» (под нестандартным углом к трубе), в поворотах: 0 — "
+            + "бесплатно, 2 — как два поворота (угол к обоим направлениям трубы)",
+            minimum = "0", maximum = "4", defaultValue = "2", example = "2")
+    @JsonProperty("odd_joint_turns")
+    public Double oddJointTurns;
+
+    @Schema(description = "Учитывать сложность формы при выборе схемы: при сравнении схем (перестройка, выбор порядка "
+            + "присоединения, отбор вариантов) к оценке S добавляется shape_weight × (штраф за поворот × повороты + "
+            + "цена стыка не «Т» × штраф за поворот × такие стыки). 0 — схемы сравниваются только по S; оценка S "
+            + "варианта и его ранг (по S) от этого не меняются",
+            minimum = "0", maximum = "3", defaultValue = "1", example = "1")
+    @JsonProperty("shape_weight")
+    public Double shapeWeight;
+
     @Schema(description = "Дополнительный отступ от зданий и ограничений сверх отступа по правилам, м (0…10; по "
             + "умолчанию 0). Отступ по правилам — минимум, он только увеличивается", minimum = "0", maximum = "10",
             defaultValue = "0", example = "1.0")
@@ -87,6 +101,14 @@ public class RunParams {
     @JsonProperty("through_own_parts")
     public Boolean throughOwnParts;
 
+    @Schema(description = "Врезка в существующую сеть в зоне отступа к зданию или запретному ограничению: false — "
+            + "нельзя (по умолчанию: технические требования, п. 2.2 и разд. 4, освобождают от отступа только прямой "
+            + "участок ввода в своё здание), врезка ставится вне зон отступа, а если иначе нельзя — ОКС без трассы с "
+            + "причиной TIE_IN_IN_CLEARANCE; true — можно, трасса ближе отступа только у самой врезки",
+            defaultValue = "false")
+    @JsonProperty("tie_in_in_clearance")
+    public Boolean tieInInClearance;
+
     @Schema(description = "Прямой участок трассы от стены здания по перпендикуляру к ней не короче, м (0…20; по "
             + "умолчанию 0). Он всегда пересекает всю зону отступа к своему зданию (технические требования, п. 2.2) — "
             + "5/7/9 м по ДУ; больше — длиннее", minimum = "0", maximum = "20", defaultValue = "0", example = "10")
@@ -124,6 +146,18 @@ public class RunParams {
                 throw new IllegalArgumentException("turn_penalty must be within [0, 10]");
             }
             p.turnPenaltyScore = turnPenalty;
+        }
+        if (oddJointTurns != null) {
+            if (oddJointTurns < 0 || oddJointTurns > 4) {
+                throw new IllegalArgumentException("odd_joint_turns must be within [0, 4]");
+            }
+            p.oddJointTurns = oddJointTurns;
+        }
+        if (shapeWeight != null) {
+            if (shapeWeight < 0 || shapeWeight > 3) {
+                throw new IllegalArgumentException("shape_weight must be within [0, 3]");
+            }
+            p.shapeWeight = shapeWeight;
         }
         if (extraClearanceM != null) {
             if (extraClearanceM < 0 || extraClearanceM > 10) {
@@ -175,6 +209,9 @@ public class RunParams {
         if (throughOwnParts != null) {
             p.rules.throughOwnParts = throughOwnParts;
         }
+        if (tieInInClearance != null) {
+            p.rules.tieInInClearance = tieInInClearance;
+        }
         if (entryLegM != null) {
             if (entryLegM < 0 || entryLegM > 20) {
                 throw new IllegalArgumentException("entry_leg_m must be within [0, 20]");
@@ -213,6 +250,8 @@ public class RunParams {
         r.existingFlow = p.rules.existingFlow.name();
         r.existingFlowShare = p.rules.existingFlowShare;
         r.turnPenalty = p.turnPenaltyScore;
+        r.oddJointTurns = p.oddJointTurns;
+        r.shapeWeight = p.shapeWeight;
         r.extraClearanceM = p.extraClearanceM;
         r.minCrossingAngleDeg = p.minCrossingAngleDeg > 0 ? p.minCrossingAngleDeg : 45;
         r.turnAngles = turnAnglesName(p.turnStepDeg);
@@ -224,6 +263,7 @@ public class RunParams {
         r.throughBuildings = p.rules.throughBuildings.name();
         r.buildingCrossingK = p.rules.buildingCrossingK;
         r.throughOwnParts = p.rules.throughOwnParts;
+        r.tieInInClearance = p.rules.tieInInClearance;
         return r;
     }
 }

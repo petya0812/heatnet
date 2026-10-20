@@ -344,7 +344,7 @@ class ApiIntegrationTest {
             assertTrue(p.hasNonNull("class") && p.hasNonNull("title") && p.hasNonNull("description"), p.toString());
         }
         assertTrue(keys.containsAll(java.util.Arrays.asList("length_limit", "existing_flow", "existing_flow_share",
-                "turn_penalty")), keys.toString());
+                "turn_penalty", "odd_joint_turns")), keys.toString());
         assertTrue(cat.get("restriction_types").size() >= 8);
 
         contest = upload("contest-lct.geojson");

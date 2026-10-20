@@ -194,6 +194,7 @@ class ServiceLayersTest {
         PlanParams defaults = new PlanParams();
         RunParams req = new RunParams();
         req.turnPenalty = 0.4;
+        req.oddJointTurns = 1.0;
         req.existingFlow = "capacity_share";
         req.existingFlowShare = 0.8;
         PlanParams p = req.apply(defaults);
@@ -201,6 +202,8 @@ class ServiceLayersTest {
         assertEquals(0.8, p.rules.existingFlowShare, 1e-12);
         assertEquals("ZERO", defaults.rules.existingFlow.name());
         assertEquals(0.4, p.turnPenaltyScore, 1e-12);
+        assertEquals(1.0, p.oddJointTurns, 1e-12);
+        assertEquals(1.0, RunParams.of(p).oddJointTurns, 1e-12);
         // defaults untouched, other fields copied
         assertEquals(defaults.maxExpansions, p.maxExpansions);
         assertEquals(defaults.threads, p.threads);
@@ -215,6 +218,9 @@ class ServiceLayersTest {
         RunParams badPenalty = new RunParams();
         badPenalty.turnPenalty = -1.0;
         assertThrows(IllegalArgumentException.class, () -> badPenalty.apply(defaults));
+        RunParams badJoint = new RunParams();
+        badJoint.oddJointTurns = 5.0;
+        assertThrows(IllegalArgumentException.class, () -> badJoint.apply(defaults));
         RunParams badShare = new RunParams();
         badShare.existingFlowShare = 1.5;
         assertThrows(IllegalArgumentException.class, () -> badShare.apply(defaults));

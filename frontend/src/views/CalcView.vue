@@ -43,7 +43,7 @@ const FIXED_TITLES: Record<string, string> = {
   norm: 'Технические требования', interpretation: 'Решения сервиса', data_assumption: 'Восполнение данных', algorithm: 'Поиск трассы',
 };
 /** Keys with a slider next to the number: the range is the range of the catalogue. */
-const SLIDERS = new Set(['turn_penalty', 'extra_clearance_m', 'min_crossing_angle_deg', 'existing_flow_share', 'entry_slack_m', 'entry_leg_m']);
+const SLIDERS = new Set(['turn_penalty', 'odd_joint_turns', 'shape_weight', 'extra_clearance_m', 'min_crossing_angle_deg', 'existing_flow_share', 'entry_slack_m', 'entry_leg_m']);
 
 const tab = computed({
   get: () => (route.query.tab === 'history' ? 'history' : 'new'),

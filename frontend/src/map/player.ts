@@ -363,7 +363,10 @@ function caption(e: Any, st: Any) {
     text = e.reason_text + (e.detail ? ` (${e.detail})` : '') + '.';
   } else {
     const r = e.route;
-    if (!r) {
+    if (!r && e.straightened) {
+      lead = `Участок к ОКС ${e.oks} проложен заново`;
+      text = 'Между теми же камерами, с меньшим числом поворотов.';
+    } else if (!r) {
       lead = `Перестройка без ОКС ${e.oks}`;
       text = 'Трасса для него не найдена — сеть пересобрана без него.';
     } else {

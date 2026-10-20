@@ -150,6 +150,65 @@ final class Draft {
         return cp;
     }
 
+    /**
+     * Lays an edge anew between the same nodes (ids, flow and DN stay): the polyline must start and end at its nodes
+     * and is checked for the DN of the edge ({@code evals} — its straight parts, as {@link RouteFinder#relay} gave).
+     */
+    void relay(Edge e, List<Coordinate> coords, List<RoutingContext.EdgeEval> evals) {
+        if (coords.get(0).distance(e.up.c) > 1e-6 || coords.get(coords.size() - 1).distance(e.down.c) > 1e-6) {
+            throw new IllegalArgumentException("a re-laid edge keeps its nodes");
+        }
+        List<RoutingContext.Interval> ivs = new ArrayList<>();
+        double pos = 0;
+        for (int i = 0; i + 1 < coords.size(); i++) {
+            for (RoutingContext.Interval iv : evals.get(i).intervals) {
+                ivs.add(new RoutingContext.Interval(pos + iv.from, pos + iv.to, iv.k, iv.objectId, iv.type));
+            }
+            pos += coords.get(i).distance(coords.get(i + 1));
+        }
+        e.coords = new ArrayList<>(coords);
+        e.intervals = ivs;
+        e.checkedDn = e.dn;
+        e.origin = "relay(" + e.origin + ")";
+    }
+
+    /**
+     * Lays the beginning of an edge anew (up to its vertex {@code end}; the rest — the entry into the building — stays):
+     * {@code head} starts at the upper node and ends at that vertex, {@code evals} — its straight parts. Ids, nodes, flow
+     * and DN stay; the special sections of the rest keep their places along it.
+     */
+    void relayHead(Edge e, int end, List<Coordinate> head, List<RoutingContext.EdgeEval> evals) {
+        if (head.get(0).distance(e.up.c) > 1e-6 || head.get(head.size() - 1).distance(e.coords.get(end)) > 1e-6) {
+            throw new IllegalArgumentException("a re-laid head keeps its ends");
+        }
+        double oldHead = 0;
+        for (int i = 0; i < end; i++) {
+            oldHead += e.coords.get(i).distance(e.coords.get(i + 1));
+        }
+        List<RoutingContext.Interval> ivs = new ArrayList<>();
+        double pos = 0;
+        for (int i = 0; i + 1 < head.size(); i++) {
+            for (RoutingContext.Interval iv : evals.get(i).intervals) {
+                ivs.add(new RoutingContext.Interval(pos + iv.from, pos + iv.to, iv.k, iv.objectId, iv.type));
+            }
+            pos += head.get(i).distance(head.get(i + 1));
+        }
+        double shift = pos - oldHead;
+        for (RoutingContext.Interval iv : e.intervals) {
+            if (iv.to > oldHead + 1e-9) {
+                ivs.add(new RoutingContext.Interval(Math.max(iv.from, oldHead) + shift, iv.to + shift, iv.k,
+                        iv.objectId, iv.type));
+            }
+        }
+        List<Coordinate> coords = new ArrayList<>(head);
+        coords.addAll(e.coords.subList(end + 1, e.coords.size()));
+        e.coords = coords;
+        double len = e.length();
+        e.intervals = RoutingContext.merge(ivs, len);
+        e.checkedDn = Math.min(e.checkedDn, e.dn);
+        e.origin = "straighten(" + e.origin + ")";
+    }
+
     /** Splits an edge at a position, returns the new junction. */
     Node split(Edge e, double pos) {
         List<Coordinate> a = new ArrayList<>();
@@ -513,14 +572,29 @@ final class Draft {
         return d;
     }
 
-    /** Structure signature: tie-in object and the OKS of every tree (for distinct variants, ТЗ 2.8). */
+    /**
+     * Structure signature: place of attachment and the OKS connected through it (for distinct variants, ТЗ 2.8). Trees
+     * tied into one existing chamber share that place: two new pipes in one chamber are one place of attachment with
+     * all their OKS, as the check of the result sees it. Trees on one existing segment are separate places (each has
+     * its own new chamber); a point where two segments meet is named by the upstream one ({@link TieOption#place}).
+     */
     String signature() {
+        Map<String, List<String>> byChamber = new java.util.TreeMap<>();
         List<String> parts = new ArrayList<>();
         for (Node r : roots) {
             List<String> ids = new ArrayList<>();
             collectOks(r, ids);
+            if (r.tie.chamber != null) {
+                byChamber.computeIfAbsent(r.tie.chamber.id, k -> new ArrayList<>()).addAll(ids);
+                continue;
+            }
             Collections.sort(ids);
-            parts.add(r.tie.existingObjectId() + ":" + String.join(",", ids));
+            parts.add(r.tie.place() + ":" + String.join(",", ids));
+        }
+        for (Map.Entry<String, List<String>> e : byChamber.entrySet()) {
+            List<String> ids = e.getValue();
+            Collections.sort(ids);
+            parts.add(e.getKey() + ":" + String.join(",", ids));
         }
         Collections.sort(parts);
         return String.join(";", parts);

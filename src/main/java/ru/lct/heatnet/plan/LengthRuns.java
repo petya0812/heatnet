@@ -35,7 +35,8 @@ final class LengthRuns {
             run.dn = top.dn;
             List<LineString> lines = new ArrayList<>();
             run.pathLength = walk(top, down, run, lines);
-            run.measured = run.totalLength;
+            // the rule counts every path separately, parallel branches do not add up (appendix 2.3, clarification 2)
+            run.measured = run.pathLength;
             run.limit = ref.pipe(top.dn).getMaxLengthM();
             run.line = Crs.UTM_FACTORY.createMultiLineString(lines.toArray(new LineString[0]));
             v.lengthRuns.add(run);

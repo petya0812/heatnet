@@ -12,6 +12,7 @@ import org.locationtech.jts.geom.Polygonal;
 import org.locationtech.jts.geom.prep.PreparedGeometry;
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.index.strtree.STRtree;
+import org.locationtech.jts.linearref.LengthIndexedLine;
 import org.locationtech.jts.operation.buffer.BufferParameters;
 import org.locationtech.jts.simplify.DouglasPeuckerSimplifier;
 import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
@@ -26,7 +27,9 @@ import ru.lct.heatnet.reference.RestrictionRule;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Geometry of one routing problem (one pipe DN, one search area): blocking zones of forbidden objects
@@ -315,9 +318,18 @@ public final class RoutingContext {
     }
 
     public void addForbidden(String objectId, String kind, Geometry raw, double clearance) {
+        addForbidden(objectId, kind, raw, clearance, objectId);
+    }
+
+    /**
+     * A forbidden object whose geometry is not the object's own one alone (the main part of a building as the own
+     * building of one OKS): {@code cacheId} names that geometry in the cache shared by all searches and threads, so
+     * zones of different geometry of one object never stand in for each other.
+     */
+    public void addForbidden(String objectId, String kind, Geometry raw, double clearance, String cacheId) {
         double d = clearance + params.simplifyToleranceM;
-        Zone z = cache.object(objectId, "zone/" + kind, d, () -> {
-            Geometry block = cache.buffer(objectId, kind, d, () -> mitreBuffer(simplify(raw), d));
+        Zone z = cache.object(cacheId, "zone/" + kind, d, () -> {
+            Geometry block = cache.buffer(cacheId, kind, d, () -> mitreBuffer(simplify(raw), d));
             Geometry core = raw instanceof Polygonal ? raw.buffer(-0.05) : null;
             Zone zone = new Zone(objectId, kind, raw, block, core);
             zone.blockDistanceM = d;
@@ -604,6 +616,78 @@ public final class RoutingContext {
     }
 
     // ------------------------------------------------------------------ endpoints
+
+    /** Kind of the zone of a route already built for this variant: the new network, not an object of the input. */
+    public static final String NEW_ROUTE = "new_route";
+
+    /** A tie-in moved out of a clearance stands this much beyond its boundary, metres. */
+    static final double OUT_OF_CLEARANCE_M = 0.1;
+
+    /** Clearances of objects containing the point: buildings and forbidden restrictions, not the new routes. */
+    public List<Zone> objectClearancesAt(Coordinate c) {
+        List<Zone> out = new ArrayList<>();
+        Point p = Crs.UTM_FACTORY.createPoint(c);
+        forEachZone(new Envelope(c), z -> {
+            if (!NEW_ROUTE.equals(z.kind) && z.blockPrepared.intersects(p)) {
+                out.add(z);
+            }
+            return true;
+        });
+        return out;
+    }
+
+    /** Stretches of existing segments inside the clearances of objects, by segment: merged {from, to} along it. */
+    private final Map<String, List<double[]>> clearanceStretches = new HashMap<>();
+
+    /**
+     * Positions along an existing segment for a tie-in at {@code t}: {@code t} itself when it is outside the
+     * clearances of objects, otherwise the nearest positions on both sides just beyond them (none past the ends of
+     * the segment).
+     */
+    public double[] outsideObjectClearances(InputModel.Segment s, double t) {
+        List<double[]> stretches = clearanceStretches.computeIfAbsent(s.id, k -> stretchesInClearances(s.line));
+        for (double[] iv : stretches) {
+            if (t >= iv[0] && t <= iv[1]) {
+                double before = iv[0] - OUT_OF_CLEARANCE_M;
+                double after = iv[1] + OUT_OF_CLEARANCE_M;
+                boolean b = iv[0] > 0;
+                boolean a = iv[1] < s.line.getLength();
+                return b && a ? new double[]{before, after} : b ? new double[]{before} : a ? new double[]{after}
+                        : new double[0];
+            }
+        }
+        return new double[]{t};
+    }
+
+    private List<double[]> stretchesInClearances(LineString line) {
+        LengthIndexedLine lil = new LengthIndexedLine(line);
+        List<double[]> ivs = new ArrayList<>();
+        forEachZone(line.getEnvelopeInternal(), z -> {
+            if (!NEW_ROUTE.equals(z.kind) && z.blockPrepared.intersects(line)) {
+                Geometry in = z.block.intersection(line);
+                for (int i = 0; i < in.getNumGeometries(); i++) {
+                    Geometry g = in.getGeometryN(i);
+                    if (g instanceof LineString && g.getLength() > 0) {
+                        double[] ix = lil.indicesOf(g);
+                        ivs.add(new double[]{Math.min(ix[0], ix[1]), Math.max(ix[0], ix[1])});
+                    }
+                }
+            }
+            return true;
+        });
+        ivs.sort((x, y) -> Double.compare(x[0], y[0]));
+        List<double[]> merged = new ArrayList<>();
+        for (double[] iv : ivs) {
+            double[] last = merged.isEmpty() ? null : merged.get(merged.size() - 1);
+            // stretches closer than twice the step beyond a boundary leave no point outside between them
+            if (last != null && iv[0] <= last[1] + 2 * OUT_OF_CLEARANCE_M) {
+                last[1] = Math.max(last[1], iv[1]);
+            } else {
+                merged.add(new double[]{iv[0], iv[1]});
+            }
+        }
+        return merged;
+    }
 
     /** Describes a route endpoint: zones containing it are checked by their core only. */
     public Endpoint endpoint(Coordinate c, Collection<String> excusedSpecialIds) {

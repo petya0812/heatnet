@@ -51,6 +51,27 @@ class OutputValidatorTest {
                 + rep.errors());
     }
 
+    /**
+     * A segment that is only the inlet into the building (from the wall, where a special section ended, to the
+     * connection point) has no outdoor part: the route ends at the wall, so the exemptions around route ends (touching
+     * a corridor or a clearance) apply there, as in the planner, and not at the connection point inside.
+     */
+    @Test
+    void routeOfAnInletOnlySegmentEndsAtTheWall() {
+        org.locationtech.jts.geom.GeometryFactory g = ru.lct.heatnet.geo.Crs.UTM_FACTORY;
+        org.locationtech.jts.geom.Coordinate wall = new org.locationtech.jts.geom.Coordinate(0, 0);
+        org.locationtech.jts.geom.Coordinate cp = new org.locationtech.jts.geom.Coordinate(3, 5);
+        org.locationtech.jts.geom.Coordinate out = new org.locationtech.jts.geom.Coordinate(-2, -4);
+        org.locationtech.jts.geom.LineString empty = g.createLineString(new org.locationtech.jts.geom.Coordinate[0]);
+        assertEquals(wall, OutputValidator.outdoorEnd(g.createLineString(
+                new org.locationtech.jts.geom.Coordinate[]{wall, cp}), empty, true));
+        assertEquals(wall, OutputValidator.outdoorEnd(g.createLineString(
+                new org.locationtech.jts.geom.Coordinate[]{cp, wall}), empty, false));
+        assertEquals(wall, OutputValidator.outdoorEnd(g.createLineString(
+                new org.locationtech.jts.geom.Coordinate[]{out, wall, cp}), g.createLineString(
+                new org.locationtech.jts.geom.Coordinate[]{out, wall}), true));
+    }
+
     @Test
     void goodResultPasses() throws Exception {
         assertEquals(0, check(fs -> { }).errorCount());

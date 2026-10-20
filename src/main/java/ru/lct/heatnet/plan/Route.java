@@ -18,6 +18,8 @@ public final class Route {
     public final List<Coordinate> coords;
     public final List<RoutingContext.EdgeEval> edges;
     public final double score;
+    /** Order of preference of the start the route leaves by (0 — the preferred wall), in score units. */
+    double preference;
     /**
      * Goals the search reached with a valid last edge, cheapest first, the chosen one included — why this tie-in
      * (filled only when the construction journal is recorded, {@link PlanParams#journal}).

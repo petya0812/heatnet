@@ -129,6 +129,13 @@ final class Frame {
         return (int) Math.floorMod(r, (long) headings);
     }
 
+    /** Whether both frames give the same directions (within {@link #ALIGN_DEG}). */
+    boolean sameAs(Frame o) {
+        double d = Math.abs(phi - o.phi);
+        d = Math.min(d, step - d);
+        return stepDeg == o.stepDeg && Math.toDegrees(d) <= ALIGN_DEG;
+    }
+
     /** Whether a route may go on from heading h1 to h2: straight on or a turn of at most 90°. */
     boolean allowedTurn(int h1, int h2) {
         int d = Math.floorMod(h1 - h2, headings);

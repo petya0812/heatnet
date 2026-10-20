@@ -212,6 +212,21 @@ public final class InputModel {
     }
 
     /** Distance from a point to the nearest existing network segment (infinite if there is no network). */
+    /**
+     * The existing segment that names a place of attachment on the network: a point at the upstream end of a segment
+     * that goes on from an upstream segment is the same place as the downstream end of that one (one point of the
+     * pipe, two segments), and is named by the upstream segment. Variants are told apart by places of attachment
+     * (ТЗ 2.8), so the planner and the check of the result name such a point the same way.
+     */
+    public String placeOf(Segment s, Coordinate p, double tol) {
+        Segment up = segments.get(s.upstreamId);
+        if (up != null && p.distance(s.line.getCoordinateN(0)) <= tol
+                && up.line.getCoordinateN(up.line.getNumPoints() - 1).distance(p) <= tol) {
+            return up.id;
+        }
+        return s.id;
+    }
+
     public double distanceToNetwork(Coordinate c) {
         if (segments.isEmpty()) {
             return Double.POSITIVE_INFINITY;
